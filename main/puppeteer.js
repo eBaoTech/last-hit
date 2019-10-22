@@ -103,7 +103,7 @@ const installListenersOnPage = async page => {
 
 		window.$lhGod = true;
 		console.log('%c last-hit: %c evaluate on new document start...', 'color:red', 'color:brown');
-		const ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/];
+		const ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/, /^.+\d{10,}$/];
 		const shouldIgnore = id => ignoredIdRegexps.some(regexp => regexp.test(id));
 		// here we are in the browser context
 		const createXPathFromElement = elm => {
@@ -145,8 +145,10 @@ const installListenersOnPage = async page => {
 
 		const transformEvent = (e, element) => {
 			let xpath = createXPathFromElement(element);
-			if (e.type === 'click' && xpath.indexOf('/svg') !== -1) {
+			if ((e.type === 'click' || e.type === 'mousedown') && xpath.indexOf('/svg') !== -1) {
+				console.log('xpath contains svg dom node.');
 				const newXpath = xpath.replace(/^(.*button.*)\/svg.*$/, '$1');
+				console.log(`new xpath after svg cut-off is ${newXpath}.`);
 				if (newXpath !== xpath) {
 					// replaced
 					let parent = element;
@@ -553,6 +555,7 @@ const launch = () => {
 			const browserArgs = [];
 			browserArgs.push(`--window-size=${width},${height + 150}`);
 			browserArgs.push('--disable-infobars');
+			browserArgs.push('--ignore-certificate-errors')
 			// browserArgs.push('--use-mobile-user-agent');
 
 			// create browser
@@ -710,7 +713,7 @@ const launch = () => {
 
 	class NodesMap {
 		constructor() {
-			this.ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/];
+			this.ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/, /^.+\d{10,}$/];
 			this.attrIdMap = new Map();
 			this.nodeIdMap = new Map();
 		}

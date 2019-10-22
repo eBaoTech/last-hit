@@ -10,6 +10,19 @@ const ThirdStepSupport = require('./3rd-comps/support');
 
 const inElectron = !!process.versions.electron;
 
+/**
+ * get logs folder.
+ * @returns {string|null} null if not in electron
+ */
+const getTempFolder = fallbackFolder => {
+	if (inElectron) {
+		const { app } = require('electron');
+		return app.getPath('logs');
+	} else {
+		return fallbackFolder;
+	}
+};
+
 class CI {
 	async startCoverage(page) {
 		if (!inElectron) {
@@ -18,6 +31,7 @@ class CI {
 			await page.coverage.startCSSCoverage();
 		}
 	}
+
 	async gatherCoverage(pages) {
 		if (!inElectron) {
 			return await pages.reduce(async (coverages, page) => {
@@ -34,7 +48,7 @@ class CI {
 					} catch (e) {
 						console.error(e);
 					}
-					return coverages.concat(jsCoverage).concat(cssCoverage);
+					return coverages.concat(jsCoverage);
 				} catch {
 					return coverages;
 				}
@@ -178,6 +192,7 @@ const launchBrowser = async replayer => {
 	const browserArgs = [];
 	browserArgs.push(`--window-size=${width + chrome.x},${height + chrome.y}`);
 	browserArgs.push('--disable-infobars');
+	browserArgs.push('--ignore-certificate-errors')
 
 	const browser = await puppeteer.launch({
 		headless: !inElectron,
@@ -502,6 +517,8 @@ class Replayer {
 			return;
 		}
 
+		// console.log("step",JSON.stringify(step))
+
 		try {
 			const ret = await (async () => {
 				switch (step.type) {
@@ -550,7 +567,14 @@ class Replayer {
 			}
 		} catch (e) {
 			const page = this.getPage(step.uuid);
-			await page.screenshot({ path: `error-${step.uuid}-${this.getSteps().indexOf(step)}.png`, type: 'png' });
+
+			this.getSummary().handleError(step, e);
+			// getSummary().handleScreenshot(step, file_path);
+			// TODO count ignore error
+			const file_path = `${getTempFolder(__dirname)}/error-${step.uuid}-${this.getSteps().indexOf(step)}.png`;
+			// console.log(logFolder)
+			await page.screenshot({ path: file_path, type: 'png' });
+
 			throw e;
 		}
 	}
@@ -576,7 +600,7 @@ class Replayer {
 			let segments = value.split('\\');
 			segments = segments[segments.length - 1].split('/');
 			const filename = segments[segments.length - 1];
-			const dir = path.join(__dirname, 'upload-temp', uuidv4());
+			const dir = path.join(getTempFolder(__dirname), 'upload-temp', uuidv4());
 			const filepath = path.join(dir, filename);
 			const byteString = atob(step.file.split(',')[1]);
 			// separate out the mime component
@@ -607,6 +631,7 @@ class Replayer {
 		} else {
 			// change is change only, cannot use type
 			await this.setValueToElement(element, step.value);
+
 			if (settings.sleepAfterChange) {
 				const wait = util.promisify(setTimeout);
 				await wait(settings.sleepAfterChange);
@@ -930,12 +955,33 @@ class Replayer {
 		return await element.evaluate(node => node.offsetWidth > 0 && node.offsetHeight > 0);
 	}
 	async setValueToElement(element, value) {
-		await element.evaluate((node, value) => {
-			node.value = value;
-			const event = document.createEvent('HTMLEvents');
-			event.initEvent('change', true, true);
-			node.dispatchEvent(event);
-		}, value);
+		const tagName = await this.getElementTagName(element);
+
+		// console.log("tagName", tagName)
+		if (tagName === 'INPUT') {
+			// sometimes key event was bound in input
+			// force trigger change event cannot cover this scenario
+			// in this case, as the following steps
+			// 1. force clear input value
+			// 2. invoke type
+			// 3. force trigger change event
+			await element.evaluate(node => node.value = '');
+			await element.type(value);
+			await element.evaluate(node => {
+				// node.value = value;
+				const event = document.createEvent('HTMLEvents');
+				event.initEvent('change', true, true);
+				node.dispatchEvent(event);
+			});
+		} else {
+			await element.evaluate((node, value) => {
+				node.value = value;
+				// node.value = value;
+				const event = document.createEvent('HTMLEvents');
+				event.initEvent('change', true, true);
+				node.dispatchEvent(event);
+			}, value);
+		}
 	}
 }
 

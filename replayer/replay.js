@@ -83,6 +83,13 @@ const controlPage = async (replayer, page, device) => {
 	await page.emulateMedia('screen');
 	const setBackground = () => (document.documentElement.style.backgroundColor = 'rgba(25,25,25,0.8)');
 	await page.evaluate(setBackground);
+	const client = await page.target().createCDPSession();
+	if (device.viewport.isMobile) {
+		await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
+		await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
+		await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+	}
+	await client.detach();
 
 	await ci.startCoverage(page);
 
@@ -192,14 +199,14 @@ const launchBrowser = async replayer => {
 	const browserArgs = [];
 	browserArgs.push(`--window-size=${width + chrome.x},${height + chrome.y}`);
 	browserArgs.push('--disable-infobars');
-	browserArgs.push('--ignore-certificate-errors')
+	browserArgs.push('--ignore-certificate-errors');
 
 	const browser = await puppeteer.launch({
 		headless: !inElectron,
 		executablePath: getChromiumExecPath(),
 		args: browserArgs,
 		defaultViewport: null,
-		slowMo: 12
+		slowMo: 20
 	});
 	const pages = await browser.pages();
 	let page;
@@ -580,11 +587,10 @@ class Replayer {
 	}
 	async executeChangeStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
-		const xpath = step.path.replace(/"/g, "'");
+		const xpath = this.transformStepPathToXPath(step.path);
 		logger.log(`Execute change, step path is ${xpath}, step value is ${step.value}.`);
 
-		const elements = await page.$x(xpath);
-		const element = elements[0];
+		const element = await this.findElement(step, page);
 		const elementTagName = await this.getElementTagName(element);
 		const elementType = await this.getElementType(element);
 
@@ -603,11 +609,6 @@ class Replayer {
 			const dir = path.join(getTempFolder(__dirname), 'upload-temp', uuidv4());
 			const filepath = path.join(dir, filename);
 			const byteString = atob(step.file.split(',')[1]);
-			// separate out the mime component
-			const mimeString = step.file
-				.split(',')[0]
-				.split(':')[1]
-				.split(';')[0];
 
 			// write the bytes of the string to an ArrayBuffer
 			const ab = new ArrayBuffer(byteString.length);
@@ -618,7 +619,6 @@ class Replayer {
 				ia[i] = byteString.charCodeAt(i);
 			}
 			// write the ArrayBuffer to a blob, and you're done
-			// const blob = new Blob([ab], { type: mimeString });
 			fs.mkdirSync(dir, { recursive: true });
 			fs.writeFileSync(filepath, Buffer.from(ia));
 
@@ -640,14 +640,13 @@ class Replayer {
 	}
 	async executeClickStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
-		const xpath = step.path.replace(/"/g, "'");
+		const xpath = this.transformStepPathToXPath(step.path);
 		logger.log(`Execute click, step path is ${xpath}.`);
 
-		const elements = await page.$x(xpath);
-		const element = elements[0];
+		const element = await this.findElement(step, page);
 		const elementTagName = await this.getElementTagName(element);
 
-		const support = this.createThirdStepSupport(element);
+		const support = this.createThirdStepSupport(page, element);
 		const done = await support.click();
 		if (done) {
 			return;
@@ -680,18 +679,17 @@ class Replayer {
 		}
 		const visible = await this.isElementVisible(element);
 		if (visible) {
-			await elements[0].click();
+			await element.click();
 		} else {
 			await element.evaluate(node => node.click());
 		}
 	}
 	async executeFocusStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
-		const xpath = step.path.replace(/"/g, "'");
+		const xpath = this.transformStepPathToXPath(step.path);
 		logger.log(`Execute focus, step path is ${xpath}.`);
 
-		const elements = await page.$x(xpath);
-		const element = elements[0];
+		const element = await this.findElement(step, page);
 		await element.evaluate(node => {
 			node.focus();
 			const event = document.createEvent('HTMLEvents');
@@ -701,7 +699,7 @@ class Replayer {
 	}
 	async executeKeydownStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
-		const xpath = step.path.replace(/"/g, "'");
+		const xpath = this.transformStepPathToXPath(step.path);
 		const value = step.value;
 		logger.log(`Execute keydown, step path is ${xpath}, key is ${value}`);
 
@@ -712,8 +710,7 @@ class Replayer {
 		if (steps[currentIndex].type === 'keydown' && steps[currentIndex + 1].type === 'change') {
 			if (steps[currentIndex].target === steps[currentIndex + 1].target) {
 				if (steps[currentIndex + 2].type === 'click') {
-					const elements = await page.$x(steps[currentIndex + 2].path.replace(/"/g, "'"));
-					const element = elements[0];
+					const element = await this.findElement(steps[currentIndex + 2], page);
 					const elementTagName = await this.getElementTagName(element);
 					const elementType = await this.getElementType(element);
 					if (elementTagName === 'INPUT' && elementType === 'submit') {
@@ -737,13 +734,11 @@ class Replayer {
 	}
 	async executeMousedownStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
-		const xpath = step.path.replace(/"/g, "'");
+		const xpath = this.transformStepPathToXPath(step.path);
 		logger.log(`Execute mouse down, step path is ${xpath}`);
 
-		const elements = await page.$x(xpath);
-		const element = elements[0];
-
-		const support = this.createThirdStepSupport(element);
+		const element = await this.findElement(step, page);
+		const support = this.createThirdStepSupport(page, element);
 		const done = await support.mousedown();
 
 		if (!done) {
@@ -765,6 +760,8 @@ class Replayer {
 	}
 	async executeScrollStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
+		const xpath = this.transformStepPathToXPath(step.path);
+		logger.log(`Execute scroll, step path is ${xpath}.`);
 
 		const scrollTop = step.scrollTop || 0;
 		const scrollLeft = step.scrollLeft || 0;
@@ -779,9 +776,7 @@ class Replayer {
 				scrollLeft
 			);
 		} else {
-			const xpath = step.path.replace(/"/g, "'");
-			const elements = await page.$x(xpath);
-			const element = elements[0];
+			const element = await this.findElement(step, page);
 			await element.evaluate(
 				(node, scrollTop, scrollLeft) => {
 					node.scrollTo({ top: scrollTop, left: scrollLeft });
@@ -883,8 +878,9 @@ class Replayer {
 			await page.close();
 		}
 	}
-	createThirdStepSupport(element) {
+	createThirdStepSupport(page, element) {
 		return new ThirdStepSupport({
+			page,
 			element,
 			tagNameRetrieve: this.createElementTagNameRetriever(),
 			elementTypeRetrieve: this.createElementTypeRetriever(),
@@ -894,6 +890,40 @@ class Replayer {
 			currentStepIndex: this.getCurrentIndex(),
 			logger
 		});
+	}
+	async findElement(step, page) {
+		const xpath = this.transformStepPathToXPath(step.path);
+		const elements = await page.$x(xpath);
+		if (elements && elements.length > 0) {
+			return elements[0];
+		}
+
+		// fallback to css path
+		const csspath = step.csspath;
+		if (csspath) {
+			const element = await page.$(csspath);
+			if (element) {
+				return element;
+			}
+		}
+
+		const custompath = step.custompath;
+		if (custompath) {
+			const element = await page.$(custompath);
+			if (element) {
+				return element;
+			}
+		}
+
+		const paths = (() => {
+			const paths = { xpath, csspath, custompath };
+			return Object.keys(paths)
+				.filter(key => paths[key])
+				.map(key => `${key}[${paths[key]}]`)
+				.join(' or ');
+		})();
+
+		throw new Error(`Cannot find element by ${paths}.`);
 	}
 	createElementTagNameRetriever() {
 		let tagName;
@@ -959,29 +989,40 @@ class Replayer {
 
 		// console.log("tagName", tagName)
 		if (tagName === 'INPUT') {
-			// sometimes key event was bound in input
-			// force trigger change event cannot cover this scenario
-			// in this case, as the following steps
-			// 1. force clear input value
-			// 2. invoke type
-			// 3. force trigger change event
-			await element.evaluate(node => node.value = '');
-			await element.type(value);
-			await element.evaluate(node => {
-				// node.value = value;
-				const event = document.createEvent('HTMLEvents');
-				event.initEvent('change', true, true);
-				node.dispatchEvent(event);
-			});
-		} else {
-			await element.evaluate((node, value) => {
-				node.value = value;
-				// node.value = value;
-				const event = document.createEvent('HTMLEvents');
-				event.initEvent('change', true, true);
-				node.dispatchEvent(event);
-			}, value);
+			const type = await this.getElementType(element);
+			if (
+				!type ||
+				['text', 'password', 'url', 'search', 'email', 'hidden', 'number', 'tel'].includes(type.toLowerCase())
+			) {
+				// sometimes key event was bound in input
+				// force trigger change event cannot cover this scenario
+				// in this case, as the following steps
+				// 1. force clear input value
+				// 2. invoke type
+				// 3. force trigger change event
+				await element.evaluate(node => (node.value = ''));
+				await element.type(value);
+				await element.evaluate(node => {
+					// node.value = value;
+					const event = document.createEvent('HTMLEvents');
+					event.initEvent('change', true, true);
+					node.dispatchEvent(event);
+				});
+				return;
+			}
 		}
+
+		// other
+		await element.evaluate((node, value) => {
+			node.value = value;
+			// node.value = value;
+			const event = document.createEvent('HTMLEvents');
+			event.initEvent('change', true, true);
+			node.dispatchEvent(event);
+		}, value);
+	}
+	transformStepPathToXPath(stepPath) {
+		return stepPath.replace(/"/g, "'");
 	}
 }
 
@@ -991,7 +1032,7 @@ const launch = () => {
 		const { storyName, flowName, replayer } = options;
 		emitter.once(`continue-replay-step-${generateKeyByString(storyName, flowName)}`, async (event, arg) => {
 			const { flow, index, command } = arg;
-			const step = replayer.getCurrentStep();
+			const step = replayer.getSteps()[index];
 			switch (command) {
 				case 'disconnect':
 					await replayer.end(false);

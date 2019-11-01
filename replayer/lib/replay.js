@@ -6,7 +6,9 @@ const uuidv4 = require('uuid/v4');
 const atob = require('atob');
 const util = require('util');
 const ReplayResult = require('./replay-result');
-const ThirdStepSupport = require('./3rd-comps/support');
+const ThirdStepSupport = require('../3rd-comps/support');
+const campareScreen = require('./campare-screen');
+const ssim = require('./ssim');
 
 const inElectron = !!process.versions.electron;
 
@@ -87,8 +89,9 @@ const controlPage = async (replayer, page, device, uuid) => {
 	const client = await page.target().createCDPSession();
 	if (device.viewport.isMobile) {
 		await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
-		await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
-		await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+		// refer to puppeteer.js
+		// await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
+		// await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
 	}
 	await client.detach();
 
@@ -121,7 +124,7 @@ const controlPage = async (replayer, page, device, uuid) => {
 		const currentIndex = replayer.getCurrentIndex();
 		// IMPORTANT do not compare url here, since might have random token. only path compare is necessary
 		const pageCreateStep = steps
-			.filter((step, index) => index > currentIndex)
+			.filter((step, index) => index >= currentIndex)
 			.find(step => step.type === 'page-created' && newUrl === getUrlPath(step.url));
 		if (pageCreateStep == null) {
 			throw new Error('Cannot find page created step for current popup, flow is broken for replay.');
@@ -207,14 +210,14 @@ const controlPage = async (replayer, page, device, uuid) => {
 			// do nothing when on record
 			return;
 		}
-		replayer.offsetRequest(replayer.findUuid(page), request);
+		replayer.offsetRequest(replayer.findUuid(page), request, true);
 	});
 	page.on('requestfailed', request => {
 		if (replayer.isOnRecord()) {
 			// do nothing when on record
 			return;
 		}
-		replayer.offsetRequest(replayer.findUuid(page), request);
+		replayer.offsetRequest(replayer.findUuid(page), request, false);
 	});
 };
 
@@ -270,11 +273,20 @@ const launchBrowser = async replayer => {
 };
 
 class LoggedRequests {
-	constructor(page) {
+	/**
+	 * @param {Page} page
+	 * @param {ReplayResult} summary
+	 */
+	constructor(page, summary) {
 		this.page = page;
 		this.timeout = 60000;
 		this.requests = [];
 		this.offsets = [];
+		// key is url, value is number array
+		this.requestsCreateAt = {};
+		this.requestsOffsetAt = {};
+
+		this.summary = summary;
 	}
 	getPage() {
 		return this.page;
@@ -282,12 +294,44 @@ class LoggedRequests {
 	create(request) {
 		// logger.log(`Request ${request.url()} created.`);
 		this.requests.push(request);
+		if (['xhr', 'fetch', 'websocket'].includes(request.resourceType())) {
+			const url = request.url();
+			const createAt = this.requestsCreateAt[url];
+			if (createAt) {
+				createAt.push(new Date().getTime());
+			} else {
+				this.requestsCreateAt[url] = [new Date().getTime()];
+			}
+		}
 		// reset used time to 0, ensure timeout is begin from the last created request
 		this.used = 0;
 	}
-	offset(request) {
+	/**
+	 * @param {Request} request puppeteer request
+	 * @param {boolean} success
+	 */
+	offset(request, success) {
 		// logger.log(`Request ${request.url()} offsetted.`);
 		this.offsets.push(request);
+
+		if (['xhr', 'fetch', 'websocket'].includes(request.resourceType())) {
+			const url = request.url();
+			const offsetAt = this.requestsOffsetAt[url];
+			if (offsetAt) {
+				offsetAt.push(new Date().getTime());
+			} else {
+				this.requestsOffsetAt[url] = [new Date().getTime()];
+			}
+			const usedTime =
+				this.requestsOffsetAt[url][this.requestsOffsetAt[url].length - 1] -
+				this.requestsCreateAt[url][this.requestsCreateAt[url].length - 1];
+			// console.log(`Used ${usedTime}ms for url[${url}]`);
+			if (success) {
+				this.summary.handleAjaxSuccess(url, usedTime);
+			} else {
+				this.summary.handleAjaxFail(url, usedTime);
+			}
+		}
 	}
 	clear() {
 		this.requests = [];
@@ -311,8 +355,13 @@ class LoggedRequests {
 		logger.debug(
 			`Check all requests are done, currently ${this.requests.length} created and ${this.offsets.length} offsetted.`
 		);
-		//when the page pop up, the page has been loaded before request interception, then requests length will less than offsets length
-		if (this.requests.length <= this.offsets.length) {
+		// when the page pop up, the page has been loaded before request interception, then requests length will less than offsets length
+		// RESEARCH might lost one request, don't know why
+		// add logic that gap requests count less or equals 2%, also pass
+		if (
+			this.requests.length <= this.offsets.length ||
+			(this.requests.length - this.offsets.length) / this.requests.length <= 0.02
+		) {
 			if (canResolve) {
 				this.clear();
 				resolve();
@@ -351,7 +400,7 @@ class Replayer {
 		this.pages = {};
 		// key is uuid, value is LoggedRequests
 		this.requests = {};
-		this.summary = new ReplayResult({ storyName, flow });
+		this.summary = new ReplayResult({ storyName, flow, env });
 		this.coverages = [];
 
 		this.onRecord = false;
@@ -460,7 +509,7 @@ class Replayer {
 				delete this.requests[uuid];
 				exists.close();
 				this.pages[uuid] = page;
-				this.requests[uuid] = new LoggedRequests(page);
+				this.requests[uuid] = new LoggedRequests(page, this.getSummary());
 				return true;
 			} else {
 				// force is true means given is from page-created or page-switched, then force close given itself
@@ -471,7 +520,7 @@ class Replayer {
 		} else {
 			// not found, put into cache
 			this.pages[uuid] = page;
-			this.requests[uuid] = new LoggedRequests(page);
+			this.requests[uuid] = new LoggedRequests(page, this.getSummary());
 			return true;
 		}
 	}
@@ -492,16 +541,25 @@ class Replayer {
 			return uuidOrPage;
 		}
 	}
+	/**
+	 * @param {string} uuid
+	 * @param {Request} request puppetter request
+	 */
 	putRequest(uuid, request) {
 		const requests = this.requests[uuid];
 		if (requests) {
 			this.requests[uuid].create(request);
 		}
 	}
-	offsetRequest(uuid, request) {
+	/**
+	 * @param {string} uuid
+	 * @param {Request} request puppetter request
+	 * @param {boolean} success
+	 */
+	offsetRequest(uuid, request, success) {
 		const requests = this.requests[uuid];
 		if (requests) {
-			requests.offset(request);
+			requests.offset(request, success);
 		}
 	}
 	async isRemoteFinsihed(page) {
@@ -559,15 +617,19 @@ class Replayer {
 			}
 		}
 	}
-	async next(flow, index) {
+	/**
+	 * do next step
+	 * @param {Flow} flow
+	 * @param {number} index
+	 * @param {string} storyName
+	 */
+	async next(flow, index, storyName) {
 		this.flow = flow;
 		this.currentIndex = index;
 		const step = this.getCurrentStep();
 		if (step.type === 'end') {
 			return;
 		}
-
-		// console.log("step",JSON.stringify(step))
 
 		try {
 			const ret = await (async () => {
@@ -611,23 +673,58 @@ class Replayer {
 						return Promise.resolve();
 				}
 			})();
-			if (!ret || ret.wait !== false) {
-				const page = await this.getPageOrThrow(step.uuid);
+
+			const page = await this.getPage(step.uuid);
+			if ((!ret || ret.wait !== false) && page != null) {
+				// const page = await this.getPageOrThrow(step.uuid);
 				await this.isRemoteFinsihed(page);
 			}
-		} catch (e) {
-			const page = this.getPage(step.uuid);
 
+			if (step.image && page != null && !page.isClosed()) {
+				const screenshotPath = path.join(getTempFolder(process.cwd()), 'screen-record');
+				if (!fs.existsSync(screenshotPath)) {
+					fs.mkdirSync(screenshotPath, { recursive: true });
+				}
+
+				const flowPath = path.join(screenshotPath, storyName, flow.name);
+				if (!fs.existsSync(flowPath)) {
+					fs.mkdirSync(flowPath, { recursive: true });
+				}
+
+				const replayImage = await page.screenshot({ encoding: 'base64' });
+				const replayImageFilename = path.join(flowPath, step.stepUuid + '_replay.png');
+				fs.writeFileSync(replayImageFilename, Buffer.from(replayImage, 'base64'));
+				const currentImageFilename = path.join(flowPath, step.stepUuid + '_baseline.png');
+				fs.writeFileSync(currentImageFilename, Buffer.from(step.image, 'base64'));
+				const ssimData = await ssim(currentImageFilename, replayImageFilename);
+				if (ssimData.ssim < 0.96 || ssimData.mcs < 0.96) {
+					const diffImage = await campareScreen(step.image, replayImage);
+					const diffImageFilename = path.join(flowPath, step.stepUuid + '_diff.png');
+					diffImage.onComplete(data => {
+						this.getSummary().compareScreenshot(step);
+						data.getDiffImage()
+							.pack()
+							.pipe(fs.createWriteStream(diffImageFilename));
+					});
+				}
+			}
+		} catch (e) {
+			console.error(e);
+			const page = this.getPage(step.uuid);
 			this.getSummary().handleError(step, e);
-			// getSummary().handleScreenshot(step, file_path);
+
 			// TODO count ignore error
-			const file_path = `${getTempFolder(__dirname)}/error-${step.uuid}-${this.getSteps().indexOf(step)}.png`;
-			// console.log(logFolder)
-			await page.screenshot({ path: file_path, type: 'png' });
+			const file_path = `${getTempFolder(process.cwd())}/error-${step.uuid}-${this.getSteps().indexOf(step)}.png`;
+			if (page) {
+				await page.screenshot({ path: file_path, type: 'png' });
+			} else {
+				logger.log("page don't exsit ");
+			}
 
 			throw e;
 		}
 	}
+
 	async executeChangeStep(step) {
 		const page = await this.getPageOrThrow(step.uuid);
 		const xpath = this.transformStepPathToXPath(step.path);
@@ -649,7 +746,7 @@ class Replayer {
 			let segments = value.split('\\');
 			segments = segments[segments.length - 1].split('/');
 			const filename = segments[segments.length - 1];
-			const dir = path.join(getTempFolder(__dirname), 'upload-temp', uuidv4());
+			const dir = path.join(getTempFolder(process.cwd()), 'upload-temp', uuidv4());
 			const filepath = path.join(dir, filename);
 			const byteString = atob(step.file.split(',')[1]);
 
@@ -675,9 +772,9 @@ class Replayer {
 			// change is change only, cannot use type
 			await this.setValueToElement(element, step.value);
 
-			if (settings.sleepAfterChange) {
+			if (env.getSleepAfterChange()) {
 				const wait = util.promisify(setTimeout);
-				await wait(settings.sleepAfterChange);
+				await wait(env.getSleepAfterChange());
 			}
 		}
 	}
@@ -1082,11 +1179,15 @@ const launch = () => {
 			switch (command) {
 				case 'disconnect':
 					await replayer.end(false);
-					event.reply(`replay-browser-disconnect-${generateKeyByString(storyName, flowName)}`, {});
+					event.reply(`replay-browser-disconnect-${generateKeyByString(storyName, flowName)}`, {
+						summary: replayer.getSummaryData()
+					});
 					break;
 				case 'abolish':
 					await replayer.end(true);
-					event.reply(`replay-browser-abolish-${generateKeyByString(storyName, flowName)}`, {});
+					event.reply(`replay-browser-abolish-${generateKeyByString(storyName, flowName)}`, {
+						summary: replayer.getSummaryData()
+					});
 					break;
 				case 'switch-to-record':
 					// keep replayer instance in replayers map
@@ -1097,7 +1198,8 @@ const launch = () => {
 					try {
 						logger.log(`Continue step[${index}]@${generateKeyByString(storyName, flowName)}.`);
 						replayer.getSummary().handle(step);
-						await replayer.next(flow, index);
+						await replayer.next(flow, index, storyName);
+
 						waitForNextStep({ event, replayer, storyName, flowName, index });
 					} catch (e) {
 						logger.error('Step execution failed, failed step as below:');
@@ -1106,18 +1208,39 @@ const launch = () => {
 						// failed, prepare for next step
 						// send back
 						replayer.getSummary().handleError(step, e);
-						waitForNextStep({ event, replayer, storyName, flowName, index, error: e.message });
+						waitForNextStep({
+							event,
+							replayer,
+							storyName,
+							flowName,
+							index,
+							error: e.message,
+							errorStack: e.stack
+						});
 					}
 			}
 		});
+
 		logger.log(
 			`Reply message step[${options.index}]@[replay-step-end-${generateKeyByString(storyName, flowName)}].`
 		);
+
 		options.event.reply(`replay-step-end-${generateKeyByString(storyName, flowName)}`, {
 			index: options.index,
-			error: options.error
+			error: options.error,
+			errorStack: options.errorStack,
+			summary: replayer.getSummaryData()
 		});
 	};
+
+	// const compareScreenshot = (step) => {
+	// 	if (step.image) {
+
+	// 		await page.screenshot({ path: file_path, type: 'png' });
+
+	// 	}
+	// }
+
 	const handle = {};
 	emitter.on('launch-replay', async (event, arg) => {
 		const { storyName, flow, index } = arg;
@@ -1137,7 +1260,15 @@ const launch = () => {
 			replayer.getSummary().handleError((flow.steps || [])[0] || {}, e);
 			// failed, prepare for next step
 			// send back
-			waitForNextStep({ event, replayer, storyName, flowName: flow.name, index, error: e.message });
+			waitForNextStep({
+				event,
+				replayer,
+				storyName,
+				flowName: flow.name,
+				index,
+				error: e.message,
+				errorStack: e.stack
+			});
 		}
 	});
 	return handle;
@@ -1180,10 +1311,6 @@ const replayers = {};
 let emitter;
 /** @type {Console} */
 let logger;
-/**
- * @property {number} sleepAfterChange
- */
-let settings;
 /** @type {Environment} */
 let env;
 
@@ -1193,9 +1320,6 @@ let env;
  * @param {{
  * 	emitter: ReplayEmitter,
  * 	logger: Console,
- * 	settings?: {
- * 		sleepAfterChange?: number
- * 	},
  * 	env?: Environment
  * }} options
  * @returns {{
@@ -1206,11 +1330,10 @@ let env;
 const create = options => {
 	emitter = options.emitter;
 	logger = options.logger;
-	settings = options.settings || {};
 	env =
 		options.env ||
 		(() => {
-			const Environment = require('./lib/env');
+			const Environment = require('./env');
 			return new Environment();
 		})();
 

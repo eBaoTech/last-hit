@@ -117,7 +117,15 @@ const installListenersOnPage = async page => {
 
 		window.$lhGod = true;
 		console.log('%c last-hit: %c evaluate on new document start...', 'color:red', 'color:brown');
-		const ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/, /^.+\d{10,}$/, /^\s*$/];
+		const ignoredIdRegexps = [
+			/^md-.+-.{6,16}$/,
+			/^select2-.+$/,
+			/^.+\d{10,}$/,
+			/^\s*$/,
+			/^.+-\d{2,10}--value$/,
+			/^.+-\d{2,}$/,
+			/^react-select.+-.+$/
+		];
 		const shouldIgnore = id => ignoredIdRegexps.some(regexp => regexp.test(id));
 		// here we are in the browser context
 
@@ -794,8 +802,11 @@ const controlPage = async (page, options, allPages) => {
 	const client = await page.target().createCDPSession();
 	if (device.viewport.isMobile) {
 		await client.send('Emulation.setFocusEmulationEnabled', { enabled: true });
-		await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
-		await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+		// IMPORTANT emit as touch events will introduce many problems
+		// such as touch on a button and scroll
+		// replayer cannot know it is a click/tap or a scroll when touch end
+		// await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' });
+		// await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
 	}
 	// await client.send('Animation.enable');
 	// client.on('Animation.animationStarted', ({ animation }) => {
@@ -1049,7 +1060,15 @@ const launch = () => {
 
 	class NodesMap {
 		constructor() {
-			this.ignoredIdRegexps = [/^md-.+-.{6,16}$/, /^select2-.+$/, /^.+\d{10,}$/, /^\s*$/];
+			this.ignoredIdRegexps = [
+				/^md-.+-.{6,16}$/,
+				/^select2-.+$/,
+				/^.+\d{10,}$/,
+				/^\s*$/,
+				/^.+-\d{2,10}--value$/,
+				/^.+-\d{2,}$/,
+				/^react-select.+-.+$/
+			];
 			this.attrIdMap = new Map();
 			this.nodeIdMap = new Map();
 		}

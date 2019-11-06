@@ -1,27 +1,40 @@
-os: 
-  - osx
-  # - windows
+os:
+    - osx
+    - windows
 language: node_js
 node_js:
-  - 12
+    - 12
 cache:
-  yarn: true
+    yarn: true
+env:
+    - YARN_GPG=no
+branches:
+    only:
+        - master
 
-addons:
-  homebrew:
-    packages:
-    - pkg-config  
-    - cairo
-    - pango
-    - libpng
-    - jpeg
-    - giflib
-    - librsvg
-    update: true
+stages:
+    - name: script
+      if: tag IS blank AND branch = master
 
 script:
-  - cd renderer
-  - yarn install
-  - cd ..
-  - yarn install
-  - yarn run pack:$TRAVIS_OS_NAME
+    - cd renderer
+    - yarn install
+    - cd ..
+    - yarn install
+    - yarn run pack:$TRAVIS_OS_NAME
+
+jobs:
+    include:
+        - stage: npm release
+          if: tag IS present AND branch = master
+          os: linux
+          before_deploy:
+              - cd replayer
+          deploy:
+              provider: npm
+              email: '$NPM_EMAIL'
+              api_token: '$NPM_TOKEN'
+              cleanup: false
+              on:
+                  branch: master
+                  tags: true

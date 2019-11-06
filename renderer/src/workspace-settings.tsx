@@ -6,6 +6,7 @@ import path from 'path';
 import history from './common/history';
 import { WorkspaceFileExt, workspaces } from './global-settings';
 import paths from './paths';
+import { SearchEngine } from './search';
 
 export type ExecuteEnv = {
 	name?: string;
@@ -73,6 +74,12 @@ export type Step = {
 	breakpoint?: boolean;
 	assertions?: StepAssertion[];
 	conditions?: StepConditions;
+	/** originial step, only exists when step is merged from force dependency flows */
+	origin?: {
+		story: string;
+		flow: string;
+		stepIndex: number;
+	};
 };
 export type Device = {
 	name: string;
@@ -164,6 +171,16 @@ export type Flow = {
 	name: string;
 	description: string;
 	steps?: Step[];
+	settings?: {
+		forceDepends?: {
+			story: string;
+			flow: string;
+		};
+		softDepends?: {
+			story: string;
+			flow: string;
+		};
+	};
 };
 export type Story = {
 	name: string;
@@ -176,6 +193,7 @@ export type WorkspaceStructure = {
 
 let currentWorkspaceSettings: WorkspaceSettings | null = null;
 let currentWorkspaceStructure: WorkspaceStructure | null = null;
+// let searchEngine: SearchEngine | null = null
 
 export const isWorkspaceOpened = () => {
 	return currentWorkspaceSettings != null && currentWorkspaceStructure != null;
@@ -293,8 +311,9 @@ export const openWorkspace = (file: string): void => {
 	workspaces.addWorkspace({ name: settings.name, path: path.parse(file).dir });
 	currentWorkspaceSettings = settings;
 	const structure = loadWorkspaceStructure(settings);
+	new SearchEngine(structure);
+	// searchEngine = search_engine
 	currentWorkspaceStructure = structure;
-
 	const current = remote.getCurrentWindow();
 	history.replace(paths.OPENED_WORKSPACE);
 	current.setTitle(`${settings.name} - ${path.parse(file).dir}`);
@@ -489,4 +508,107 @@ const isStoryFolderExists = (settings: WorkspaceSettings, story: Story): boolean
 const isStoryFileExists = (settings: WorkspaceSettings, story: Story): boolean => {
 	const storyFilePath = getStoryFilePath(settings, story);
 	return fs.existsSync(storyFilePath) && fs.statSync(storyFilePath).isFile();
+};
+
+const findInDependencyChain = (
+	story: string,
+	flow: string,
+	dependsChain: { story: string; flow: string }[]
+): boolean => {
+	return dependsChain.some(node => node.story === story && node.flow === flow);
+};
+const doLoopCheck = (
+	workspace: WorkspaceStructure,
+	dependsStoryName: string,
+	dependsFlowName: string,
+	dependsChain: { story: string; flow: string }[]
+): boolean => {
+	if (findInDependencyChain(dependsStoryName, dependsFlowName, dependsChain)) {
+		return false;
+	}
+	// find story
+	const dependsStory = workspace.stories.find(story => story.name === dependsStoryName);
+	if (!dependsStory) {
+		return true;
+	}
+	// find flow
+	const dependsFlow = (dependsStory.flows || []).find(flow => flow.name === dependsFlowName);
+	if (!dependsFlow) {
+		return true;
+	}
+	const { forceDepends = null, softDepends = null } = dependsFlow.settings || {};
+	if (forceDepends) {
+		if (findInDependencyChain(forceDepends.story, forceDepends.flow, dependsChain)) {
+			return false;
+		} else {
+			// push dependency to chain
+			dependsChain.push({ story: dependsStoryName, flow: dependsFlowName });
+			return doLoopCheck(workspace, forceDepends.story, forceDepends.flow, dependsChain);
+		}
+	}
+	if (softDepends) {
+		if (findInDependencyChain(softDepends.story, softDepends.flow, dependsChain)) {
+			return false;
+		} else {
+			// push dependency to chain
+			dependsChain.push({ story: dependsStoryName, flow: dependsFlowName });
+			return doLoopCheck(workspace, softDepends.story, softDepends.flow, dependsChain);
+		}
+	}
+	return true;
+};
+
+/**
+ * only check loop. return true even dependency flow not found.
+ * @returns {boolean} return true when pass the loop check
+ */
+export const loopCheck = (
+	workspace: WorkspaceStructure,
+	dependsStoryName: string,
+	dependsFlowName: string,
+	myStoryName: string,
+	myFlowName: string
+): boolean => {
+	return doLoopCheck(workspace, dependsStoryName, dependsFlowName, [{ story: myStoryName, flow: myFlowName }]);
+};
+
+/**
+ * find all force dependencies, and merge steps to one flow
+ */
+export const findAndMergeForceDependencyFlows = (workspace: WorkspaceStructure, story: Story, flow: Flow): Flow => {
+	const forceDependencyFlow: Flow = { name: flow.name, description: `Merged force dependency flows`, steps: [] };
+
+	let currentFlow = flow;
+	while (currentFlow.settings && currentFlow.settings.forceDepends) {
+		const { story: storyName, flow: flowName } = currentFlow.settings.forceDepends;
+		const dependsStory = (workspace.stories || [])!.find(story => story.name === storyName);
+		if (dependsStory == null) {
+			throw new Error(`Dependency story[${storyName}] not found.`);
+		}
+		const dependsFlow = (dependsStory.flows || []).find(flow => flow.name === flowName);
+		if (dependsFlow == null) {
+			throw new Error(`Dependency flow[${flowName}@${storyName}] not found.`);
+		}
+
+		const steps = dependsFlow.steps || [];
+
+		forceDependencyFlow.steps!.splice(
+			0,
+			0,
+			...steps.map(step => ({
+				...step,
+				breakpoint: false,
+				origin: { story: dependsStory.name, flow: dependsFlow.name, stepIndex: step.stepIndex }
+			}))
+		);
+		currentFlow = dependsFlow;
+	}
+
+	forceDependencyFlow.steps = forceDependencyFlow.steps!.filter((step, index) => {
+		return index === 0 || (step.type !== StepType.START && step.type !== StepType.END);
+	});
+	forceDependencyFlow.steps.push({ type: StepType.END } as Step);
+	forceDependencyFlow.steps.forEach((step, index) => (step.stepIndex = index));
+
+	return forceDependencyFlow;
 };

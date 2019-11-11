@@ -6,7 +6,8 @@ import path from 'path';
 import history from './common/history';
 import { WorkspaceFileExt, workspaces } from './global-settings';
 import paths from './paths';
-import { SearchEngine } from './search';
+import { generateKeyByObject } from './common/flow-utils';
+import util from 'util';
 
 export type ExecuteEnv = {
 	name?: string;
@@ -84,6 +85,7 @@ export type Step = {
 export type Device = {
 	name: string;
 	userAgent: string;
+	wechat?: boolean;
 	viewport: {
 		width: number;
 		height: number;
@@ -193,7 +195,6 @@ export type WorkspaceStructure = {
 
 let currentWorkspaceSettings: WorkspaceSettings | null = null;
 let currentWorkspaceStructure: WorkspaceStructure | null = null;
-// let searchEngine: SearchEngine | null = null
 
 export const isWorkspaceOpened = () => {
 	return currentWorkspaceSettings != null && currentWorkspaceStructure != null;
@@ -311,8 +312,7 @@ export const openWorkspace = (file: string): void => {
 	workspaces.addWorkspace({ name: settings.name, path: path.parse(file).dir });
 	currentWorkspaceSettings = settings;
 	const structure = loadWorkspaceStructure(settings);
-	new SearchEngine(structure);
-	// searchEngine = search_engine
+
 	currentWorkspaceStructure = structure;
 	const current = remote.getCurrentWindow();
 	history.replace(paths.OPENED_WORKSPACE);
@@ -424,30 +424,51 @@ export const createFlowOnCurrentWorkspace = async (
 
 	return Promise.resolve(flow);
 };
+const flowSaver: { [key in string]: NodeJS.Timeout } = {};
 export const saveFlow = async (story: Story, flow: Flow) => {
-	const { settings } = getCurrentWorkspace();
-
-	// const storyFolder = getStoryFolder(settings, story);
-	try {
-		// properties name and state are no need to persist
-		const { name, steps, ...rest } = flow;
-		await jsonfile.writeFile(
-			getFlowFilePath(settings, story, flow),
-			{
-				steps: (steps || []).map((step, index) => {
-					step.stepIndex = index;
-					return step;
-				}),
-				...rest
-			},
-			{ encoding: 'UTF-8', spaces: '\t' }
-		);
-		return Promise.resolve();
-	} catch (e) {
-		return Promise.reject(e);
+	const flowKey = generateKeyByObject(story, flow);
+	let handler = flowSaver[flowKey];
+	if (handler) {
+		clearTimeout(handler);
+		delete flowSaver[flowKey];
 	}
+	flowSaver[flowKey] = setTimeout(async () => {
+		delete flowSaver[flowKey];
+		const { settings } = getCurrentWorkspace();
+
+		const flowFile = getFlowFilePath(settings, story, flow);
+		if (!fs.existsSync(flowFile) || fs.statSync(flowFile).isDirectory()) {
+			// flow file must exists and is file
+			return;
+		}
+		try {
+			// properties name and state are no need to persist
+			const { name, steps, ...rest } = flow;
+			await jsonfile.writeFile(
+				flowFile,
+				{
+					steps: (steps || []).map((step, index) => {
+						step.stepIndex = index;
+						return step;
+					}),
+					...rest
+				},
+				{ encoding: 'UTF-8', spaces: '\t' }
+			);
+			return Promise.resolve();
+		} catch (e) {
+			return Promise.reject(e);
+		}
+	}, 2000);
 };
-export const renameFlow = (story: Story, flow: Flow, newname: string): Promise<Flow> => {
+export const renameFlow = async (story: Story, flow: Flow, newname: string) => {
+	const flowKey = generateKeyByObject(story, flow);
+	let handler = flowSaver[flowKey];
+	if (handler) {
+		// wait for save
+		const wait = util.promisify(setTimeout);
+		await wait(3000);
+	}
 	const { settings } = getCurrentWorkspace();
 
 	const storyFolder = getStoryFolder(settings, story);
@@ -462,6 +483,13 @@ export const renameFlow = (story: Story, flow: Flow, newname: string): Promise<F
 };
 
 export const deleteFlowFromCurrentWorkspace = async (story: Story, flow: Flow) => {
+	const flowKey = generateKeyByObject(story, flow);
+	let handler = flowSaver[flowKey];
+	if (handler) {
+		// save is unnecessary
+		clearTimeout(handler);
+		delete flowSaver[flowKey];
+	}
 	const { settings } = getCurrentWorkspace();
 
 	if (isFlowFileExists(settings, story, flow)) {

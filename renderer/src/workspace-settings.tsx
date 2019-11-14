@@ -11,8 +11,8 @@ import util from 'util';
 
 export type ExecuteEnv = {
 	name?: string;
-	urlReplaceRegexp?: string;
-	urlReplaceTo?: string;
+	urlReplaceRegexp?: string | string[];
+	urlReplaceTo?: string | string[];
 };
 export type WorkspaceSettings = {
 	name: string;
@@ -81,6 +81,8 @@ export type Step = {
 		flow: string;
 		stepIndex: number;
 	};
+	/** sleep for given time(in ms) after step executed */
+	sleep?: number;
 };
 export type Device = {
 	name: string;
@@ -127,7 +129,12 @@ export type ResourceLoadStep = Step & {
 export type LoadStep = Step & { type: StepType.LOAD; target: string };
 export type UnloadStep = Step & { type: StepType.UNLOAD; target: string };
 export type PageClosedStep = Step & { type: StepType.PAGE_CLOSED; url: string };
-export type PageCreatedStep = Step & { type: StepType.PAGE_CREATED; url: string };
+export type PageCreatedStep = Step & {
+	type: StepType.PAGE_CREATED;
+	url: string;
+	/** for install uuid of popup, manually input */
+	forStepUuid: string;
+};
 export type PageErrorStep = Step & { type: StepType.PAGE_ERROR; url: string };
 export type PageSwitchStep = Step & { type: StepType.PAGE_SWITCHED; url: string };
 export type DialogOpenStep = Step & {
@@ -146,7 +153,11 @@ export type EndStep = Step & { type: StepType.END };
 export type DomEventStep = Step & { target: string };
 export type ClickStep = DomEventStep & { type: StepType.CLICK };
 export type MouseDownStep = DomEventStep & { type: StepType.MOUSE_DOWN };
-export type ScrollStep = DomEventStep & { type: StepType.SCROLL; scrollTop: number; scrollLeft: number };
+export type ScrollStep = DomEventStep & {
+	type: StepType.SCROLL;
+	scrollTop: number;
+	scrollLeft: number;
+};
 export type TextChangeEvent = DomEventStep & { type: StepType.CHANGE };
 export type FocusStep = DomEventStep & { type: StepType.FOCUS };
 export type ChangeStep = DomEventStep & { type: StepType.CHANGE; value: string };
@@ -199,7 +210,10 @@ let currentWorkspaceStructure: WorkspaceStructure | null = null;
 export const isWorkspaceOpened = () => {
 	return currentWorkspaceSettings != null && currentWorkspaceStructure != null;
 };
-export const getCurrentWorkspace = (): { settings: WorkspaceSettings; structure: WorkspaceStructure } => {
+export const getCurrentWorkspace = (): {
+	settings: WorkspaceSettings;
+	structure: WorkspaceStructure;
+} => {
 	return {
 		settings: getCurrentWorkspaceSettings()!,
 		structure: getCurrentWorkspaceStructure()!
@@ -260,10 +274,15 @@ const loadWorkspaceStructure = (settings: WorkspaceSettings): WorkspaceStructure
 					.readdirSync(storyFolder)
 					.map(file => {
 						let flow: Flow | null = null;
-						if (isFlowFile(file) && fs.statSync(path.join(storyFolder, file)).isFile()) {
+						if (
+							isFlowFile(file) &&
+							fs.statSync(path.join(storyFolder, file)).isFile()
+						) {
 							// if flow file
 							try {
-								const flowFileData = jsonfile.readFileSync(path.join(storyFolder, file));
+								const flowFileData = jsonfile.readFileSync(
+									path.join(storyFolder, file)
+								);
 								const { description, ...rest } = flowFileData;
 								flow = { name: asFlowName(file), description, ...rest };
 							} catch (e) {
@@ -317,12 +336,16 @@ export const openWorkspace = (file: string): void => {
 	const current = remote.getCurrentWindow();
 	history.replace(paths.OPENED_WORKSPACE);
 	current.setTitle(`${settings.name} - ${path.parse(file).dir}`);
-	current.setResizable(true);
-	current.setMaximizable(true);
+	current.resizable = true;
+	current.maximizable = true;
 	current.maximize();
 };
 
-export const createWorkspace = (folder: string, filename: string, options: { name: string }): void => {
+export const createWorkspace = (
+	folder: string,
+	filename: string,
+	options: { name: string }
+): void => {
 	const { name } = options;
 	fs.mkdirSync(folder, { recursive: true });
 	const file = path.join(folder, filename + '.' + WorkspaceFileExt);
@@ -333,8 +356,8 @@ export const closeCurrentWorkspace = (): void => {
 	releaseCurrentWorkspace();
 	const current = remote.getCurrentWindow();
 	current.setTitle('Welcome to LastHit');
-	current.setResizable(false);
-	current.setMaximizable(false);
+	current.resizable = false;
+	current.maximizable = false;
 	current.setSize(780, 480, true);
 	current.center();
 };
@@ -353,7 +376,11 @@ export const createStoryOnCurrentWorkspace = async (options: {
 	}
 
 	fs.mkdirSync(getStoryFolder(settings, story));
-	jsonfile.writeFileSync(getStoryFilePath(settings, story), { description }, { encoding: 'UTF-8', spaces: '\t' });
+	jsonfile.writeFileSync(
+		getStoryFilePath(settings, story),
+		{ description },
+		{ encoding: 'UTF-8', spaces: '\t' }
+	);
 
 	structure.stories.push(story);
 	structure.stories.sort((a, b) => a.name.localeCompare(b.name));
@@ -383,7 +410,10 @@ export const renameStory = (story: Story, newname: string): Promise<Story> => {
 
 	const storyFolder = getStoryFolder(settings, story);
 	if (isStoryFileExists(settings, story)) {
-		fse.renameSync(getStoryFilePath(settings, story), path.join(storyFolder, asStoryFileName(newname)));
+		fse.renameSync(
+			getStoryFilePath(settings, story),
+			path.join(storyFolder, asStoryFileName(newname))
+		);
 	}
 	if (isStoryFolderExists(settings, story)) {
 		fse.renameSync(storyFolder, path.join(folder, newname));
@@ -473,7 +503,10 @@ export const renameFlow = async (story: Story, flow: Flow, newname: string) => {
 
 	const storyFolder = getStoryFolder(settings, story);
 	if (isFlowFileExists(settings, story, flow)) {
-		fse.renameSync(getFlowFilePath(settings, story, flow), path.join(storyFolder, asFlowFileName(newname)));
+		fse.renameSync(
+			getFlowFilePath(settings, story, flow),
+			path.join(storyFolder, asFlowFileName(newname))
+		);
 	}
 
 	flow.name = newname;
@@ -597,14 +630,24 @@ export const loopCheck = (
 	myStoryName: string,
 	myFlowName: string
 ): boolean => {
-	return doLoopCheck(workspace, dependsStoryName, dependsFlowName, [{ story: myStoryName, flow: myFlowName }]);
+	return doLoopCheck(workspace, dependsStoryName, dependsFlowName, [
+		{ story: myStoryName, flow: myFlowName }
+	]);
 };
 
 /**
  * find all force dependencies, and merge steps to one flow
  */
-export const findAndMergeForceDependencyFlows = (workspace: WorkspaceStructure, story: Story, flow: Flow): Flow => {
-	const forceDependencyFlow: Flow = { name: flow.name, description: `Merged force dependency flows`, steps: [] };
+export const findAndMergeForceDependencyFlows = (
+	workspace: WorkspaceStructure,
+	story: Story,
+	flow: Flow
+): Flow => {
+	const forceDependencyFlow: Flow = {
+		name: flow.name,
+		description: `Merged force dependency flows`,
+		steps: []
+	};
 
 	let currentFlow = flow;
 	while (currentFlow.settings && currentFlow.settings.forceDepends) {
@@ -626,7 +669,11 @@ export const findAndMergeForceDependencyFlows = (workspace: WorkspaceStructure, 
 			...steps.map(step => ({
 				...step,
 				breakpoint: false,
-				origin: { story: dependsStory.name, flow: dependsFlow.name, stepIndex: step.stepIndex }
+				origin: {
+					story: dependsStory.name,
+					flow: dependsFlow.name,
+					stepIndex: step.stepIndex
+				}
 			}))
 		);
 		currentFlow = dependsFlow;

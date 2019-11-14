@@ -1,6 +1,6 @@
 {
 	"name": "last-hit",
-	"version": "0.4.0",
+	"version": "0.6.0",
 	"description": "last hit on enterprise web",
 	"main": "main/index.js",
 	"scripts": {
@@ -12,7 +12,10 @@
 		"pack:windows": "npm run build:renderer && electron-builder -w",
 		"pack:osx": "npm run build:renderer && electron-builder -m",
 		"pack:all": "npm run build:renderer && electron-builder -mw",
-		"coverage": "nyc report --reporter=html"
+		"coverage": "nyc report --reporter=html",
+		"publish:osx": "npm run build:renderer && electron-builder -m --publish onTagOrDraft",
+		"publish:windows": "npm run build:renderer && electron-builder -w --publish onTagOrDraft",
+		"publish:linux": "npm run build:renderer && electron-builder -l --publish onTagOrDraft"
 	},
 	"repository": {
 		"type": "git",
@@ -30,8 +33,8 @@
 	},
 	"homepage": "https://www.last-hit.com",
 	"devDependencies": {
-		"electron": "^6.0.11",
-		"electron-builder": "21.1.6",
+		"electron": "^7.1.1",
+		"electron-builder": "^22.1.0",
 		"nyc": "^14.1.1"
 	},
 	"dependencies": {

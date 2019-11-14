@@ -98,11 +98,11 @@ export default (props: {
 		const options = {
 			url,
 			device: (() => {
-				const device = devices.find(d => d.name === values.device)!;
+				const device = JSON.parse(JSON.stringify(devices.find(d => d.name === values.device)!));
 				if (values.wechat) {
 					device.userAgent += ' MicroMessenger/6.5.7';
+					device.wechat = true;
 				}
-				device.wechat = true;
 				return device;
 			})(),
 			uuid: uuidv4()
@@ -146,7 +146,7 @@ export default (props: {
 				SelectProps={{ MenuProps: { PaperProps: { className: classes.selectPopupMenu } } }}
 			>
 				{devices
-					.sort((a, b) => a.name.localeCompare(b.name))
+					// .sort((a, b) => a.name.localeCompare(b.name))
 					.map(device => {
 						return (
 							<MenuItem key={device.name} value={device.name} dense>

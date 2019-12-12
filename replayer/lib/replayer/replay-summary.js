@@ -53,7 +53,8 @@ var ReplaySummary = /** @class */ (function () {
             ignoreErrorList: [],
             numberOfAjax: 0,
             slowAjaxRequest: [],
-            screenCompareList: []
+            screenCompareList: [],
+            errorStack: ""
         };
     }
     ReplaySummary.prototype.getEnvironment = function () {
@@ -77,11 +78,12 @@ var ReplaySummary = /** @class */ (function () {
     ReplaySummary.prototype.handleError = function (step, error) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                if (step.type == 'ajax') {
+                if (step.type == "ajax") {
                     // ignore
                 }
                 else {
                     this.summary.numberOfFailed += 1;
+                    this.summary.errorStack = error.stack;
                 }
                 return [2 /*return*/, Promise.resolve(true)];
             });
@@ -90,7 +92,7 @@ var ReplaySummary = /** @class */ (function () {
     ReplaySummary.prototype.handle = function (step) {
         return __awaiter(this, void 0, void 0, function () {
             return __generator(this, function (_a) {
-                if (step.type == 'ajax') {
+                if (step.type == "ajax") {
                     // ignore
                     this.summary.numberOfSuccess += 1;
                 }
@@ -126,15 +128,15 @@ var ReplaySummary = /** @class */ (function () {
     };
     ReplaySummary.prototype.print = function () {
         console.table([this.summary], [
-            'storyName',
-            'flowName',
-            'numberOfStep',
-            'numberOfUIBehavior',
-            'numberOfSuccess',
-            'numberOfFailed',
-            'ignoreErrorList',
-            'numberOfAjax',
-            'slowAjaxRequest'
+            "storyName",
+            "flowName",
+            "numberOfStep",
+            "numberOfUIBehavior",
+            "numberOfSuccess",
+            "numberOfFailed",
+            "ignoreErrorList",
+            "numberOfAjax",
+            "slowAjaxRequest"
         ]);
     };
     return ReplaySummary;

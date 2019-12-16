@@ -1,10 +1,10 @@
 import { Button, ButtonGroup } from '@blueprintjs/core';
+import { remote } from 'electron';
+import { Flow, StartStep, Story } from 'last-hit-types';
 import React from 'react';
 import styled from 'styled-components';
-import { Flow, Story, StartStep } from '../../types';
 import UIContext from '../../common/context';
 import { EventTypes } from '../../events';
-import { remote } from 'electron';
 
 const Container = styled.div`
 	display: flex;
@@ -20,6 +20,9 @@ export default (props: { story: Story; flow: Flow }): JSX.Element => {
 	const onFlowSettingsClicked = (): void => {
 		emitter.emit(EventTypes.ASK_FLOW_SETTINGS, story, flow);
 	};
+	const onFlowParamsClicked = ():void => {
+		emitter.emit(EventTypes.ASK_FLOW_PARAMS, story, flow);
+	}
 	const onFlowRecordClicked = (): void => {
 		if (flow.settings && flow.settings.forceDepends) {
 			// start replay force dependencies first
@@ -52,6 +55,7 @@ export default (props: { story: Story; flow: Flow }): JSX.Element => {
 		<Container>
 			<ButtonGroup minimal={true}>
 				<Button icon="cog" title="Flow settings" onClick={onFlowSettingsClicked} />
+				<Button icon="changes" title="Parameterize" onClick={onFlowParamsClicked} />
 				<Button icon="refresh" title="Reload from file" onClick={onReloadClicked} />
 			</ButtonGroup>
 			<Placeholder />

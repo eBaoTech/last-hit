@@ -19,20 +19,26 @@ jobs:
         uses: actions/setup-node@v1
         with:
           node-version: ${{ matrix.node_version }}
-      - name: Cache Renderer Node Modules
-        uses: actions/cache@v1
-        with:
-          path: renderer/node_modules
-          key: ${{ runner.OS }}-build-${{ hashFiles('renderer/package.json') }}
-      - name: Install Renderer Node Modules
+      - name: Install Extensions Dependencies
+        run: |
+          cd extensions
+          yarn install
+      - name: Install Test One Extension Dependencies
+        run: |
+          cd test-one-extension
+          yarn install
+      - name: Install Workspace Extension Dependencies
+        run: |
+          cd workspace-extension
+          yarn install
+      - name: Install Replayer Dependencies
+        run: |
+          cd replayer
+          yarn install
+      - name: Install Renderer Dependencies
         run: |
           cd renderer
           yarn install
-      - name: Cache App Node Modules
-        uses: actions/cache@v1
-        with:
-          path: node_modules
-          key: ${{ runner.OS }}-build-${{ hashFiles('package.json') }}
       - name: Install App Node Modules
         run: yarn install
       - name: Package for Windows

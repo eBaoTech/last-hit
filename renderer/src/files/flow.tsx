@@ -1,10 +1,11 @@
 import fs from 'fs';
 import fse from 'fs-extra';
 import jsonfile from 'jsonfile';
+import { Flow, Step, Story } from 'last-hit-types';
 import path from 'path';
 import { getActiveWorkspace } from '../active';
 import { asFlowKeyByName } from '../common/context';
-import { Flow, Story, WorkspaceSettings, WorkspaceStructure, StepType, Step } from '../types';
+import { WorkspaceSettings, WorkspaceStructure } from '../types';
 import { getStoryFolder, isStoryFolderExists } from './story';
 
 /**
@@ -142,7 +143,8 @@ export const findAndMergeForceDependencyFlows = (
 	const forceDependencyFlow: Flow = {
 		name: flow.name,
 		description: `Merged force dependency flows`,
-		steps: []
+		steps: [],
+		params: []
 	};
 
 	let currentFlow = flow;
@@ -172,14 +174,29 @@ export const findAndMergeForceDependencyFlows = (
 				}
 			}))
 		);
+		mergeFlowInput(dependsFlow, forceDependencyFlow);
 		currentFlow = dependsFlow;
 	}
 
 	forceDependencyFlow.steps = forceDependencyFlow.steps!.filter((step, index) => {
-		return index === 0 || (step.type !== StepType.START && step.type !== StepType.END);
+		return index === 0 || (step.type !== 'start' && step.type !== 'end');
 	});
-	forceDependencyFlow.steps.push({ type: StepType.END } as Step);
+	forceDependencyFlow.steps.push({ type: 'end' } as Step);
 	forceDependencyFlow.steps.forEach((step, index) => (step.stepIndex = index));
 
 	return forceDependencyFlow;
+};
+
+export const mergeFlowInput = (source: Flow, target: Flow): void => {
+	if (source.params && source.params.length !== 0) {
+		target.params = target.params || [];
+		const existsParamNames = target.params!.reduce((names, param) => {
+			names[param.name] = true;
+			return names;
+		}, {} as { [key in string]: true });
+		source.params
+			.filter(param => param.type !== 'out')
+			.filter(param => existsParamNames[param.name] !== true)
+			.forEach(param => target.params!.push(param));
+	}
 };

@@ -1,16 +1,29 @@
 import fs from 'fs';
 import jsonfile from 'jsonfile';
+import { Flow, Step, Story, StartStep, FlowParameters } from 'last-hit-types';
 import path from 'path';
 import stream from 'stream';
 import Environment from '../config/env';
-import { Flow, FlowFile, FlowResult, Story, Step } from '../types';
-import { getLogger, getProcessId, generateKeyByObject } from '../utils';
-import { ReplayEmitter, createReplayer } from '../replayer';
+import { createReplayer, ReplayEmitter } from '../replayer';
 import { CallbackEvent } from '../replayer/replay-emitter';
+import { FlowFile, FlowResult } from '../types';
+import { generateKeyByObject, getLogger, getProcessId } from '../utils';
 
 const processId = getProcessId();
-const logger = getLogger();
 
+export const mergeFlowInput = (source: Flow, target: Flow): void => {
+	if (source.params && source.params.length !== 0) {
+		target.params = target.params || [];
+		const existsParamNames = target.params!.reduce((names, param) => {
+			names[param.name] = true;
+			return names;
+		}, {} as { [key in string]: true });
+		source.params
+			.filter(param => param.type !== 'out')
+			.filter(param => existsParamNames[param.name] !== true)
+			.forEach(param => target.params!.push(param));
+	}
+};
 /**
  * find all force dependencies, and merge steps to one flow
  */
@@ -18,7 +31,8 @@ const findAndMergeForceDependencyFlows = (flow: Flow, env: Environment): Flow =>
 	const forceDependencyFlow = {
 		name: flow.name,
 		description: `Merged force dependency flows`,
-		steps: [] as Array<Step>
+		steps: [] as Array<Step>,
+		params: [] as FlowParameters
 	};
 
 	let currentFlow = flow;
@@ -51,6 +65,7 @@ const findAndMergeForceDependencyFlows = (flow: Flow, env: Environment): Flow =>
 					} as Step)
 			)
 		);
+		mergeFlowInput(dependsFlow, forceDependencyFlow);
 		currentFlow = dependsFlow;
 	}
 
@@ -181,6 +196,7 @@ const handleReplayStepEnd = (
 };
 
 export const handleFlow = (flowFile: FlowFile, env: Environment): Promise<FlowResult> => {
+	const logger = getLogger();
 	const { story: storyName, flow: flowName } = flowFile;
 	const flowKey = `${flowName}@${storyName}`;
 	const workspace = env.getWorkspace();
@@ -241,10 +257,11 @@ export const handleFlow = (flowFile: FlowFile, env: Environment): Promise<FlowRe
 					}
 				} as Step)
 			);
+		mergeFlowInput(flow, forceDependsFlow);
 		flow = forceDependsFlow;
 	}
 
-	const startStep = flow.steps![0];
+	const startStep = flow.steps![0] as StartStep;
 	if (startStep.type !== 'start') {
 		console.info(
 			(`Process[${processId}] Flow ${flowKey} has no start step, ignored.` as any).red
@@ -268,7 +285,7 @@ export const handleFlow = (flowFile: FlowFile, env: Environment): Promise<FlowRe
 	}
 
 	const promise = new Promise<FlowResult>(resolve => {
-		handleReplayStepEnd(emitter, { name: storyName }, flow, () => {
+		handleReplayStepEnd(emitter, { name: storyName } as Story, flow, () => {
 			const summary = replayer.current.getSummaryData();
 			timeLogger.timeEnd(flowKey);
 			resolve({

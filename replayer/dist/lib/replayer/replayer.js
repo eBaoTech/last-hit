@@ -78,7 +78,7 @@ var ssim_1 = __importDefault(require("./ssim"));
 var getChromiumExecPath = function () {
     return puppeteer_1.default.executablePath().replace('app.asar', 'app.asar.unpacked');
 };
-var launchBrowser = function (replayer) { return __awaiter(void 0, void 0, void 0, function () {
+var launchBrowser = function (replayer, input) { return __awaiter(void 0, void 0, void 0, function () {
     var step, _a, url, device, uuid, _b, width, height, browserArgs, browser, pages, page, accomplishedStep;
     return __generator(this, function (_c) {
         switch (_c.label) {
@@ -86,7 +86,7 @@ var launchBrowser = function (replayer) { return __awaiter(void 0, void 0, void 
                 step = replayer.getCurrentStep();
                 return [4 /*yield*/, replayer
                         .getRegistry()
-                        .stepShouldStart(replayer.getStoryName(), simplifyFlow(replayer.getFlow()), step)];
+                        .stepShouldStart(replayer.getStoryName(), simplifyFlow(replayer.getFlow(), input), step)];
             case 1:
                 // send step-should-start to extension, replace step when successfully return
                 step = _c.sent();
@@ -134,7 +134,7 @@ var launchBrowser = function (replayer) { return __awaiter(void 0, void 0, void 
                 _c.sent();
                 return [4 /*yield*/, replayer
                         .getRegistry()
-                        .stepAccomplished(replayer.getStoryName(), simplifyFlow(replayer.getFlow()), step)];
+                        .stepAccomplished(replayer.getStoryName(), simplifyFlow(replayer.getFlow(), input), step)];
             case 9:
                 accomplishedStep = _c.sent();
                 if (!accomplishedStep._.passed) {
@@ -145,9 +145,17 @@ var launchBrowser = function (replayer) { return __awaiter(void 0, void 0, void 
         }
     });
 }); };
-var simplifyFlow = function (flow) {
-    var name = flow.name, description = flow.description;
-    return { name: name, description: description };
+var simplifyFlow = function (flow, input) {
+    var name = flow.name, description = flow.description, params = flow.params;
+    return {
+        name: name,
+        description: description,
+        params: !input
+            ? params
+            : Object.keys(input).map(function (key) {
+                return { name: key, type: 'in', value: input[key] };
+            })
+    };
 };
 var Replayer = /** @class */ (function () {
     function Replayer(options) {
@@ -543,7 +551,7 @@ var Replayer = /** @class */ (function () {
                         return [4 /*yield*/, this.prepareFlow()];
                     case 2:
                         _a.sent();
-                        return [4 /*yield*/, launchBrowser(this)];
+                        return [4 /*yield*/, launchBrowser(this, this.getFlowInput())];
                     case 3:
                         page = _a.sent();
                         return [4 /*yield*/, this.isRemoteFinsihed(page)];
@@ -560,7 +568,25 @@ var Replayer = /** @class */ (function () {
             var _this = this;
             return __generator(this, function (_d) {
                 switch (_d.label) {
-                    case 0: return [4 /*yield*/, this.getRegistry().flowAccomplished(this.getStoryName(), simplifyFlow(this.getFlow()))];
+                    case 0: return [4 /*yield*/, this.getRegistry().flowAccomplished(this.getStoryName(), (function () {
+                            var flow = simplifyFlow(_this.getFlow());
+                            var _a = flow.params, params = _a === void 0 ? [] : _a;
+                            // clone
+                            params = JSON.parse(JSON.stringify(params));
+                            var input = _this.getFlowInput() || {};
+                            // put instance data into params, and pass to extension
+                            Object.keys(input).forEach(function (key) {
+                                var param = params.find(function (param) { return param.name === key; });
+                                if (!param) {
+                                    params.push({ name: key, type: 'in', value: input[key] });
+                                }
+                                else {
+                                    param.value = input[key];
+                                }
+                            });
+                            flow.params = params;
+                            return flow;
+                        })())];
                     case 1:
                         accomplishedFlow = _d.sent();
                         _a = (accomplishedFlow || { _: { output: {} } })._, _b = (_a === void 0 ? { output: {} } : _a).output, output = _b === void 0 ? {} : _b;
@@ -663,7 +689,7 @@ var Replayer = /** @class */ (function () {
      */
     Replayer.prototype.next = function (flow, index, storyName) {
         return __awaiter(this, void 0, void 0, function () {
-            var step, ret, page, screenshotPath, flowPath, replayImage, replayImageFilename, currentImageFilename, ssimData, diffImage, diffImageFilename_1, e_5, stepOnError, accomplishedStep;
+            var step, ret, page, screenshotPath, flowPath, replayImage, replayImageFilename, currentImageFilename, ssimData, diffImage, diffImageFilename_1, e_5, stepOnError, accomplishedStep, e_6;
             var _this = this;
             return __generator(this, function (_a) {
                 switch (_a.label) {
@@ -675,13 +701,13 @@ var Replayer = /** @class */ (function () {
                             return [2 /*return*/];
                         }
                         step = this.replaceWithFlowParams(step);
-                        return [4 /*yield*/, this.getRegistry().stepShouldStart(this.getStoryName(), simplifyFlow(this.getFlow()), step)];
+                        _a.label = 1;
                     case 1:
+                        _a.trys.push([1, 10, , 13]);
+                        return [4 /*yield*/, this.getRegistry().stepShouldStart(this.getStoryName(), simplifyFlow(this.getFlow(), this.getFlowInput()), step)];
+                    case 2:
                         // send step-should-start to extension, replace step when successfully return
                         step = _a.sent();
-                        _a.label = 2;
-                    case 2:
-                        _a.trys.push([2, 10, , 13]);
                         return [4 /*yield*/, (function () { return __awaiter(_this, void 0, void 0, function () {
                                 var _a;
                                 var _this = this;
@@ -808,7 +834,7 @@ var Replayer = /** @class */ (function () {
                     case 11:
                         // console.error(e);
                         _a.sent();
-                        return [4 /*yield*/, this.getRegistry().stepOnError(this.getStoryName(), simplifyFlow(this.getFlow()), step, e_5)];
+                        return [4 /*yield*/, this.getRegistry().stepOnError(this.getStoryName(), simplifyFlow(this.getFlow(), this.getFlowInput()), step, e_5)];
                     case 12:
                         stepOnError = _a.sent();
                         if (!stepOnError._.fixed) {
@@ -820,17 +846,24 @@ var Replayer = /** @class */ (function () {
                             return [2 /*return*/];
                         }
                         return [3 /*break*/, 13];
-                    case 13: return [4 /*yield*/, this.getRegistry().stepAccomplished(this.getStoryName(), simplifyFlow(this.getFlow()), step)];
+                    case 13:
+                        _a.trys.push([13, 15, , 17]);
+                        return [4 /*yield*/, this.getRegistry().stepAccomplished(this.getStoryName(), simplifyFlow(this.getFlow(), this.getFlowInput()), step)];
                     case 14:
                         accomplishedStep = _a.sent();
-                        if (!!accomplishedStep._.passed) return [3 /*break*/, 16];
-                        // extension says failed
-                        return [4 /*yield*/, this.handleStepError(step, accomplishedStep._.error)];
+                        if (!accomplishedStep._.passed) {
+                            // extension says failed
+                            throw accomplishedStep._.error ||
+                                new Error("Fail on step cause by step accomplished extension.");
+                        }
+                        return [3 /*break*/, 17];
                     case 15:
-                        // extension says failed
+                        e_6 = _a.sent();
+                        return [4 /*yield*/, this.handleStepError(step, e_6)];
+                    case 16:
                         _a.sent();
-                        throw accomplishedStep._.error;
-                    case 16: return [2 /*return*/];
+                        throw e_6;
+                    case 17: return [2 /*return*/];
                 }
             });
         });
@@ -908,7 +941,7 @@ var Replayer = /** @class */ (function () {
                         return [4 /*yield*/, fileChooser.accept([filepath])];
                     case 6:
                         _a.sent();
-                        return [3 /*break*/, 10];
+                        return [3 /*break*/, 12];
                     case 7: 
                     // change is change only, cannot use type
                     return [4 /*yield*/, this.setValueToElement(element, step.value)];
@@ -922,7 +955,18 @@ var Replayer = /** @class */ (function () {
                     case 9:
                         _a.sent();
                         _a.label = 10;
-                    case 10: return [2 /*return*/];
+                    case 10:
+                        if (!step.forceBlur) return [3 /*break*/, 12];
+                        return [4 /*yield*/, element.evaluate(function (node) {
+                                node.focus && node.focus();
+                                var event = document.createEvent('HTMLEvents');
+                                event.initEvent('blur', true, true);
+                                node.dispatchEvent(event);
+                            })];
+                    case 11:
+                        _a.sent();
+                        _a.label = 12;
+                    case 12: return [2 /*return*/];
                 }
             });
         });
@@ -1326,7 +1370,7 @@ var Replayer = /** @class */ (function () {
     };
     Replayer.prototype.findElement = function (step, page) {
         return __awaiter(this, void 0, void 0, function () {
-            var xpath, elements, csspath, element, custompath, element, frames, index, frame, element, paths;
+            var xpath, elements, csspath, count, element, custompath, count, element, frames, index, frame, element, paths;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -1334,47 +1378,55 @@ var Replayer = /** @class */ (function () {
                         return [4 /*yield*/, page.$x(xpath)];
                     case 1:
                         elements = _a.sent();
-                        if (elements && elements.length > 0) {
+                        if (elements && elements.length === 1) {
                             return [2 /*return*/, elements[0]];
                         }
                         csspath = step.csspath;
-                        if (!csspath) return [3 /*break*/, 3];
-                        return [4 /*yield*/, page.$(csspath)];
+                        if (!csspath) return [3 /*break*/, 4];
+                        return [4 /*yield*/, page.evaluate(function (csspath) { return document.querySelectorAll(csspath).length; }, csspath)];
                     case 2:
-                        element = _a.sent();
-                        if (element) {
-                            return [2 /*return*/, element];
-                        }
-                        _a.label = 3;
+                        count = _a.sent();
+                        if (!(count === 1)) return [3 /*break*/, 4];
+                        return [4 /*yield*/, page.$(csspath)];
                     case 3:
-                        custompath = step.custompath;
-                        if (!custompath) return [3 /*break*/, 5];
-                        return [4 /*yield*/, page.$(custompath)];
-                    case 4:
                         element = _a.sent();
                         if (element) {
                             return [2 /*return*/, element];
                         }
-                        _a.label = 5;
+                        _a.label = 4;
+                    case 4:
+                        custompath = step.custompath;
+                        if (!custompath) return [3 /*break*/, 7];
+                        return [4 /*yield*/, page.evaluate(function (csspath) { return document.querySelectorAll(csspath).length; }, custompath)];
                     case 5:
-                        frames = page.frames();
-                        if (!(frames.length > 0)) return [3 /*break*/, 9];
-                        index = 0;
-                        _a.label = 6;
+                        count = _a.sent();
+                        if (!(count === 1)) return [3 /*break*/, 7];
+                        return [4 /*yield*/, page.$(custompath)];
                     case 6:
-                        if (!(index < frames.length)) return [3 /*break*/, 9];
-                        frame = frames[index];
-                        return [4 /*yield*/, frame.$x(xpath)];
-                    case 7:
                         element = _a.sent();
-                        if (element.length > 0) {
-                            return [2 /*return*/, element[0]];
+                        if (element) {
+                            return [2 /*return*/, element];
                         }
+                        _a.label = 7;
+                    case 7:
+                        frames = page.frames();
+                        if (!(frames.length > 0)) return [3 /*break*/, 11];
+                        index = 0;
                         _a.label = 8;
                     case 8:
-                        index++;
-                        return [3 /*break*/, 6];
+                        if (!(index < frames.length)) return [3 /*break*/, 11];
+                        frame = frames[index];
+                        return [4 /*yield*/, frame.$x(xpath)];
                     case 9:
+                        element = _a.sent();
+                        if (element.length === 1) {
+                            return [2 /*return*/, element[0]];
+                        }
+                        _a.label = 10;
+                    case 10:
+                        index++;
+                        return [3 /*break*/, 8];
+                    case 11:
                         paths = (function () {
                             var paths = { xpath: xpath, csspath: csspath, custompath: custompath };
                             return Object.keys(paths)

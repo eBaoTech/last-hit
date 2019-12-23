@@ -1920,20 +1920,20 @@ kind-of@^6.0.0, kind-of@^6.0.2:
   resolved "https://registry.yarnpkg.com/kind-of/-/kind-of-6.0.2.tgz#01146b36a6218e64e58f3a8d66de5d7fc6f6d051"
   integrity sha512-s5kLOcnH0XqDO+FvuaLX8DDjZ18CGFk7VygH40QoKPUQhW4e2rvM0rwUq0t8IQDOwYSeLK01U90OjzBTme2QqA==
 
-last-hit-extensions@^0.7.5-dev.11:
-  version "0.7.5-dev.11"
-  resolved "https://registry.yarnpkg.com/last-hit-extensions/-/last-hit-extensions-0.7.5-dev.11.tgz#4985e188d3c9cf514de37dce87ac0c07ef1350f1"
-  integrity sha512-FHVfsjfYWUCb5OhcKzqr2o9+LKBw61ReDIk20WKuTjutlm3ss1wAIOgOvSx233jhX+9Arlkd1Fnv2cad5aR9Uw==
+last-hit-extensions@^0.8.1-dev.4:
+  version "0.8.1-dev.4"
+  resolved "https://registry.npmjs.org/last-hit-extensions/-/last-hit-extensions-0.8.1-dev.4.tgz#6ebf6da2461850990c70bcf32bf37e6e8885d899"
+  integrity sha512-GM0YbyZuGnidG/7vOZRbrg6uwJ6/4Ns9Ng2YhpRHHLO4j2Q9qJR7rG8gUxyxUiLjlaJm54B8fgSWQpbuyRO+bg==
   dependencies:
     "@types/jsonfile" "^5.0.0"
     jsonfile "^5.0.0"
-    last-hit-types "^0.7.5-dev.7"
+    last-hit-types "^0.8.1-dev.2"
     typescript "^3.7.2"
 
-last-hit-types@^0.7.5-dev.7:
-  version "0.7.5-dev.7"
-  resolved "https://registry.yarnpkg.com/last-hit-types/-/last-hit-types-0.7.5-dev.7.tgz#369516724f188e40535f7bc99e4e311c07035e21"
-  integrity sha512-QrGLdDw9a3M+rnywPOBxYGI/lvb1aINMrtIrum5BorDECCkEMBXXpKo8TUq+VoZxdyhI/T3eBEkcJ6q0eFY6Xg==
+last-hit-types@^0.8.1-dev.2:
+  version "0.8.1-dev.2"
+  resolved "https://registry.npmjs.org/last-hit-types/-/last-hit-types-0.8.1-dev.2.tgz#29b09a792b80aae09039b90c3445bc84aacc38a3"
+  integrity sha512-7P4E0VMrPRSPC+eWJz/c5mtr5Q5xZ8FUyT29wV9IELCCJvi2eRvixIAjl+/n3XJ7OmNR4TIAQy6W9MDlfgzvLQ==
 
 last-run@^1.1.0:
   version "1.1.1"

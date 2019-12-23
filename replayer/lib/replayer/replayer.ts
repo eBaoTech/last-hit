@@ -18,6 +18,8 @@ import {
 	DialogCloseStep,
 	DialogOpenStep,
 	Flow,
+	FlowParameter,
+	FlowParameters,
 	FocusStep,
 	KeydownStep,
 	MousedownStep,
@@ -62,12 +64,15 @@ const getChromiumExecPath = () => {
 	return puppeteer.executablePath().replace('app.asar', 'app.asar.unpacked');
 };
 
-const launchBrowser = async (replayer: Replayer) => {
+const launchBrowser = async (
+	replayer: Replayer,
+	input: WorkspaceExtensions.FlowParameterValues
+) => {
 	let step = replayer.getCurrentStep();
 	// send step-should-start to extension, replace step when successfully return
 	step = await replayer
 		.getRegistry()
-		.stepShouldStart(replayer.getStoryName(), simplifyFlow(replayer.getFlow()), step);
+		.stepShouldStart(replayer.getStoryName(), simplifyFlow(replayer.getFlow(), input), step);
 
 	const { url, device, uuid } = step as StartStep;
 	const {
@@ -122,7 +127,7 @@ const launchBrowser = async (replayer: Replayer) => {
 	// accomplished only triggerred when step has not error on replaying
 	const accomplishedStep = await replayer
 		.getRegistry()
-		.stepAccomplished(replayer.getStoryName(), simplifyFlow(replayer.getFlow()), step);
+		.stepAccomplished(replayer.getStoryName(), simplifyFlow(replayer.getFlow(), input), step);
 	if (!accomplishedStep._.passed) {
 		// extension says failed
 		throw accomplishedStep._.error!;
@@ -130,9 +135,20 @@ const launchBrowser = async (replayer: Replayer) => {
 	return page;
 };
 
-const simplifyFlow = (flow: Flow): WorkspaceExtensions.SimpleFlow => {
-	const { name, description } = flow;
-	return { name, description };
+const simplifyFlow = (
+	flow: Flow,
+	input?: WorkspaceExtensions.FlowParameterValues
+): WorkspaceExtensions.SimpleFlow => {
+	const { name, description, params } = flow;
+	return {
+		name,
+		description,
+		params: !input
+			? params
+			: (Object.keys(input).map(key => {
+					return { name: key, type: 'in', value: input[key] } as FlowParameter;
+			  }) as FlowParameters)
+	};
 };
 
 class Replayer {
@@ -471,13 +487,30 @@ class Replayer {
 		);
 		await this.prepareFlow();
 
-		const page = await launchBrowser(this);
+		const page = await launchBrowser(this, this.getFlowInput());
 		await this.isRemoteFinsihed(page);
 	}
 	private async accomplishFlow(): Promise<void> {
 		const accomplishedFlow: WorkspaceExtensions.AccomplishedFlow | null = await this.getRegistry().flowAccomplished(
 			this.getStoryName(),
-			simplifyFlow(this.getFlow())
+			(() => {
+				const flow = simplifyFlow(this.getFlow());
+				let { params = [] } = flow;
+				// clone
+				params = JSON.parse(JSON.stringify(params));
+				const input = this.getFlowInput() || {};
+				// put instance data into params, and pass to extension
+				Object.keys(input).forEach(key => {
+					const param = params.find(param => param.name === key);
+					if (!param) {
+						params.push({ name: key, type: 'in', value: input[key] } as FlowParameter);
+					} else {
+						param.value = input[key];
+					}
+				});
+				flow.params = params;
+				return flow;
+			})()
 		);
 		const { _: { output = {} } = { output: {} } } = accomplishedFlow || { _: { output: {} } };
 		if (Object.keys(output).length === 0) {
@@ -534,7 +567,7 @@ class Replayer {
 	private replaceWithFlowParams(step: Step): Step {
 		const newStep = { ...step } as any;
 
-		['checked', 'value'].forEach(propName => {
+		['value'].forEach(propName => {
 			const value = step[propName];
 			if (!value || typeof value !== 'string') {
 				return;
@@ -560,14 +593,14 @@ class Replayer {
 
 		step = this.replaceWithFlowParams(step);
 
-		// send step-should-start to extension, replace step when successfully return
-		step = await this.getRegistry().stepShouldStart(
-			this.getStoryName(),
-			simplifyFlow(this.getFlow()),
-			step
-		);
-
 		try {
+			// send step-should-start to extension, replace step when successfully return
+			step = await this.getRegistry().stepShouldStart(
+				this.getStoryName(),
+				simplifyFlow(this.getFlow(), this.getFlowInput()),
+				step
+			);
+
 			const ret = await (async () => {
 				switch (step.type) {
 					case 'change':
@@ -653,7 +686,7 @@ class Replayer {
 			// send step-on-error to extension
 			const stepOnError = await this.getRegistry().stepOnError(
 				this.getStoryName(),
-				simplifyFlow(this.getFlow()),
+				simplifyFlow(this.getFlow(), this.getFlowInput()),
 				step,
 				e
 			);
@@ -668,15 +701,20 @@ class Replayer {
 
 		// send step-accomplished to extension
 		// accomplished only triggerred when step has not error on replaying
-		const accomplishedStep = await this.getRegistry().stepAccomplished(
-			this.getStoryName(),
-			simplifyFlow(this.getFlow()),
-			step
-		);
-		if (!accomplishedStep._.passed) {
-			// extension says failed
-			await this.handleStepError(step, accomplishedStep._.error!);
-			throw accomplishedStep._.error!;
+		try {
+			const accomplishedStep = await this.getRegistry().stepAccomplished(
+				this.getStoryName(),
+				simplifyFlow(this.getFlow(), this.getFlowInput()),
+				step
+			);
+			if (!accomplishedStep._.passed) {
+				// extension says failed
+				throw accomplishedStep._.error ||
+					new Error(`Fail on step cause by step accomplished extension.`);
+			}
+		} catch (e) {
+			await this.handleStepError(step, e);
+			throw e;
 		}
 	}
 	private async handleStepError(step: Step, e: any) {
@@ -742,6 +780,14 @@ class Replayer {
 			if (env.getSleepAfterChange()) {
 				const wait = util.promisify(setTimeout);
 				await wait(env.getSleepAfterChange()!);
+			}
+			if (step.forceBlur) {
+				await element.evaluate((node: Element) => {
+					(node as any).focus && (node as HTMLElement).focus();
+					const event = document.createEvent('HTMLEvents');
+					event.initEvent('blur', true, true);
+					node.dispatchEvent(event);
+				});
 			}
 		}
 	}
@@ -1012,24 +1058,36 @@ class Replayer {
 	private async findElement(step: Step, page: Page): Promise<ElementHandle> {
 		const xpath = this.transformStepPathToXPath(step.path!);
 		const elements = await page.$x(xpath);
-		if (elements && elements.length > 0) {
+		if (elements && elements.length === 1) {
 			return elements[0];
 		}
 
 		// fallback to css path
 		const csspath = step.csspath;
 		if (csspath) {
-			const element = await page.$(csspath);
-			if (element) {
-				return element;
+			const count = await page.evaluate(
+				csspath => document.querySelectorAll(csspath).length,
+				csspath
+			);
+			if (count === 1) {
+				const element = await page.$(csspath);
+				if (element) {
+					return element;
+				}
 			}
 		}
 
 		const custompath = step.custompath;
 		if (custompath) {
-			const element = await page.$(custompath);
-			if (element) {
-				return element;
+			const count = await page.evaluate(
+				csspath => document.querySelectorAll(csspath).length,
+				custompath
+			);
+			if (count === 1) {
+				const element = await page.$(custompath);
+				if (element) {
+					return element;
+				}
 			}
 		}
 
@@ -1039,7 +1097,7 @@ class Replayer {
 			for (let index = 0; index < frames.length; index++) {
 				const frame = frames[index];
 				const element = await frame.$x(xpath);
-				if (element.length > 0) {
+				if (element.length === 1) {
 					return element[0];
 				}
 			}

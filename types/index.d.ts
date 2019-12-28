@@ -164,6 +164,12 @@ declare module 'last-hit-types' {
 				story: string;
 				flow: string;
 			};
+			dataDepends?: [
+				{
+					story: string;
+					flow: string;
+				}
+			];
 		};
 	};
 	export type Story = {
@@ -187,7 +193,9 @@ declare module 'last-hit-types' {
 		export type ExtensionTypes = 'workspace' | 'tbd';
 		export type BrowserOperationEventTypes =
 			| 'get-element-attr-value'
-			| 'get-element-prop-value';
+			| 'get-element-prop-value'
+			| 'wait'
+			| 'wait-element';
 
 		export interface IExtensionEntryPoint {
 			activate(): Promise<void>;
@@ -313,6 +321,12 @@ declare module 'last-hit-types' {
 				propName: string,
 				pageUuid?: string
 			): Promise<string | null>;
+			waitForElement(
+				selector: string,
+				time: number,
+				pageUuid?: string,
+				options?: { visible: boolean; hidden: boolean }
+			): Promise<void>;
 			isInIDE(): boolean;
 		}
 

@@ -26,8 +26,12 @@ export type StepSearchItemListener = (story: any, flow: any, step: any, match: a
 export interface IUIEventEmitter {
 	emit(event: EventTypes.ASK_TOGGLE_NAVIGATOR): boolean;
 	emit(event: EventTypes.NAVIGATOR_TOGGLED, opened: boolean): boolean;
+
 	emit(event: EventTypes.ASK_OPEN_ENV): boolean;
 	emit(event: EventTypes.CLOSE_ENV_DIALOG): boolean;
+
+	emit(event: EventTypes.ASK_OPEN_UPDATE, current: string, latest: string): boolean;
+	emit(event: EventTypes.CLOSE_UPDATE_DIALOG): boolean;
 
 	emit(event: EventTypes.ASK_CREATE_STORY): boolean;
 	emit(event: EventTypes.ASK_RENAME_STORY, story: Story): boolean;
@@ -63,6 +67,7 @@ export interface IUIEventEmitter {
 	emit(event: EventTypes.CLOSE_FLOW_CREATE_DIALOG): boolean;
 	emit(event: EventTypes.CLOSE_FLOW_RENAME_DIALOG): boolean;
 	emit(event: EventTypes.CLOSE_FLOW_SETTINGS_DIALOG, story: Story, flow: Flow): boolean;
+	emit(event: EventTypes.CLOSE_FLOW_RELOAD_DIALOG, story: Story, flow: Flow): boolean;
 	emit(event: EventTypes.CLOSE_FLOW_PARAMS_DIALOG, story: Story, flow: Flow): boolean;
 	emit(event: EventTypes.CLOSE_FLOW_REPLAY_DIALOG, story: Story, flow: Flow): boolean;
 	emit(event: EventTypes.CLOSE_FLOW_RECORD_DIALOG, story: Story, flow: Flow): boolean;
@@ -88,6 +93,7 @@ export interface IUIEventEmitter {
 
 	emit(event: EventTypes.STEP_SELECTED, story: Story, flow: Flow, step: Step): boolean;
 	emit(event: EventTypes.STEP_BREAKPOINT_CHANGED, story: Story, flow: Flow, step: Step): boolean;
+	emit(event: EventTypes.STEP_CONTENT_CHANGED, story: Story, flow: Flow, step: Step): boolean;
 	emit(event: EventTypes.STEP_DELETED, story: Story, flow: Flow, step: Step): boolean;
 	emit(event: EventTypes.ASK_SHOW_THUMBNAIL, story: Story, flow: Flow, step: Step): boolean;
 	emit(event: EventTypes.ASK_STEP_SEARCH): boolean;
@@ -112,8 +118,15 @@ export interface IUIEventEmitter {
 
 	on(event: EventTypes.ASK_TOGGLE_NAVIGATOR, listener: NoArgListener): this;
 	on(event: EventTypes.NAVIGATOR_TOGGLED, listener: BooleanListener): this;
+
 	on(event: EventTypes.ASK_OPEN_ENV, listener: NoArgListener): this;
 	on(event: EventTypes.CLOSE_ENV_DIALOG, listener: NoArgListener): this;
+
+	on(
+		event: EventTypes.ASK_OPEN_UPDATE,
+		listener: (current: string, latest: string) => void
+	): this;
+	on(event: EventTypes.CLOSE_UPDATE_DIALOG, listener: NoArgListener): this;
 
 	on(event: EventTypes.ASK_CREATE_STORY, listener: NoArgListener): this;
 	on(event: EventTypes.ASK_RENAME_STORY, listener: StoryListener): this;
@@ -138,6 +151,7 @@ export interface IUIEventEmitter {
 	on(event: EventTypes.CLOSE_FLOW_CREATE_DIALOG, listener: NoArgListener): this;
 	on(event: EventTypes.CLOSE_FLOW_RENAME_DIALOG, listener: NoArgListener): this;
 	on(event: EventTypes.CLOSE_FLOW_SETTINGS_DIALOG, listener: FlowListener): this;
+	on(event: EventTypes.CLOSE_FLOW_RELOAD_DIALOG, listener: FlowListener): this;
 	on(event: EventTypes.CLOSE_FLOW_PARAMS_DIALOG, listener: FlowListener): this;
 	on(event: EventTypes.CLOSE_FLOW_REPLAY_DIALOG, listener: FlowListener): this;
 	on(event: EventTypes.CLOSE_FLOW_RECORD_DIALOG, listener: FlowListener): this;
@@ -153,6 +167,7 @@ export interface IUIEventEmitter {
 
 	on(event: EventTypes.STEP_SELECTED, listener: StepListener): this;
 	on(event: EventTypes.STEP_BREAKPOINT_CHANGED, listener: StepListener): this;
+	on(event: EventTypes.STEP_CONTENT_CHANGED, listener: StepListener): this;
 	on(event: EventTypes.STEP_DELETED, listener: StepListener): this;
 	on(event: EventTypes.ASK_SHOW_THUMBNAIL, listener: StepListener): this;
 	on(event: EventTypes.ASK_STEP_SEARCH, listener: NoArgListener): this;
@@ -165,8 +180,15 @@ export interface IUIEventEmitter {
 
 	off(event: EventTypes.ASK_TOGGLE_NAVIGATOR, listener: NoArgListener): this;
 	off(event: EventTypes.NAVIGATOR_TOGGLED, listener: BooleanListener): this;
+
 	off(event: EventTypes.ASK_OPEN_ENV, listener: NoArgListener): this;
 	off(event: EventTypes.CLOSE_ENV_DIALOG, listener: NoArgListener): this;
+
+	off(
+		event: EventTypes.ASK_OPEN_UPDATE,
+		listener: (current: string, latest: string) => void
+	): this;
+	off(event: EventTypes.CLOSE_UPDATE_DIALOG, listener: NoArgListener): this;
 
 	off(event: EventTypes.ASK_CREATE_STORY, listener: NoArgListener): this;
 	off(event: EventTypes.ASK_RENAME_STORY, listener: StoryListener): this;
@@ -191,6 +213,7 @@ export interface IUIEventEmitter {
 	off(event: EventTypes.CLOSE_FLOW_CREATE_DIALOG, listener: NoArgListener): this;
 	off(event: EventTypes.CLOSE_FLOW_RENAME_DIALOG, listener: NoArgListener): this;
 	off(event: EventTypes.CLOSE_FLOW_SETTINGS_DIALOG, listener: FlowListener): this;
+	off(event: EventTypes.CLOSE_FLOW_RELOAD_DIALOG, listener: FlowListener): this;
 	off(event: EventTypes.CLOSE_FLOW_PARAMS_DIALOG, listener: FlowListener): this;
 	off(event: EventTypes.CLOSE_FLOW_REPLAY_DIALOG, listener: FlowListener): this;
 	off(event: EventTypes.CLOSE_FLOW_RECORD_DIALOG, listener: FlowListener): this;
@@ -206,6 +229,7 @@ export interface IUIEventEmitter {
 
 	off(event: EventTypes.STEP_SELECTED, listener: StepListener): this;
 	off(event: EventTypes.STEP_BREAKPOINT_CHANGED, listener: StepListener): this;
+	off(event: EventTypes.STEP_CONTENT_CHANGED, listener: StepListener): this;
 	off(event: EventTypes.STEP_DELETED, listener: StepListener): this;
 	off(event: EventTypes.ASK_SHOW_THUMBNAIL, listener: StepListener): this;
 	off(event: EventTypes.ASK_STEP_SEARCH, listener: NoArgListener): this;

@@ -84,7 +84,7 @@ npm run start
 > Please download [Release Package](https://github.com/last-hit-aab/last-hit/releases),  
 
 ## Create your first Test Case
-[Quick Start Guide](https://last-hit.com/quick-start-guide)
+[Quick Start Guide](https://www.last-hit.com/quick-start/)
 
 ## Resources for Learning last-hit
 - [last-hit.com/docs](https://last-hit.com/tutorial/) - all of Last-Hit's documentation
@@ -93,4 +93,4 @@ npm run start
 
 # License
 
-React is [MIT licensed](./LICENSE).
+Last-Hit is [MIT licensed](./LICENSE).

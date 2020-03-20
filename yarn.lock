@@ -2575,20 +2575,20 @@ kind-of@^6.0.0, kind-of@^6.0.2:
   resolved "https://registry.yarnpkg.com/kind-of/-/kind-of-6.0.2.tgz#01146b36a6218e64e58f3a8d66de5d7fc6f6d051"
   integrity sha512-s5kLOcnH0XqDO+FvuaLX8DDjZ18CGFk7VygH40QoKPUQhW4e2rvM0rwUq0t8IQDOwYSeLK01U90OjzBTme2QqA==
 
-last-hit-extensions@^0.8.5-dev.6:
-  version "0.8.5-dev.6"
-  resolved "https://registry.npmjs.org/last-hit-extensions/-/last-hit-extensions-0.8.5-dev.6.tgz#fd1f7d9d06bc665c8afd99a0461fe1b467c75815"
-  integrity sha512-Kysfgm3OLpzbqAatICysf90242O09vUc/oUHC30wO+bqdXA1+jWHQ4+hqMS7TiWIoqR4WC8CmxrBOKFkQSRmVg==
+last-hit-extensions@^0.9.9:
+  version "0.9.9"
+  resolved "https://registry.npmjs.org/last-hit-extensions/-/last-hit-extensions-0.9.9.tgz#c402adc5558a57ae3c5cc0ed6052026d550e9683"
+  integrity sha512-8RO/W5R8PdrABFS0s7D+ApdAKfutG7buM2500QeOcUKbiAWfSBJXlQ3r5RpFlz0F8SMNwdUEpFDQ4arCOvupKA==
   dependencies:
     "@types/jsonfile" "^5.0.0"
     jsonfile "^5.0.0"
-    last-hit-types "^0.8.5-dev.5"
+    last-hit-types "^0.9.9"
     typescript "^3.7.2"
 
-last-hit-replayer@^0.8.5-dev.5:
-  version "0.8.5-dev.5"
-  resolved "https://registry.npmjs.org/last-hit-replayer/-/last-hit-replayer-0.8.5-dev.5.tgz#3a060306953819cc5b49b161e0b154d8f60828bf"
-  integrity sha512-HsGV8IP0jLP/b8H3jYvtfEACHlmcI17SzQCoaxqDPZNSXs9Vbqswuv3Tx6O1HmwfAM34T8VOAXSfFc12mecadA==
+last-hit-replayer@^0.9.12:
+  version "0.9.12"
+  resolved "https://registry.npmjs.org/last-hit-replayer/-/last-hit-replayer-0.9.12.tgz#f6106523490262313312bd0eb6ce3e30a552f939"
+  integrity sha512-O+B5vrhUp1Yyy2XQ9HYqLEpfLvhUwH3ymZr1CoKSKVlLltG7ZDcC9nUlbX3xvp4QburtdtAItiyJic5lQPyj/g==
   dependencies:
     "@types/atob" "^2.1.2"
     "@types/clone" "^0.1.30"
@@ -2606,7 +2606,7 @@ last-hit-replayer@^0.8.5-dev.5:
     handlebars "^4.5.3"
     image-ssim "^0.2.0"
     jsonfile "^5.0.0"
-    last-hit-extensions "^0.8.5-dev.6"
+    last-hit-extensions "^0.9.9"
     mkdirp "^0.5.1"
     node-resemble-js "^0.2.0"
     nyc "^14.1.1"
@@ -2617,10 +2617,10 @@ last-hit-replayer@^0.8.5-dev.5:
     uuid "^3.3.3"
     yargs "^14.0.0"
 
-last-hit-types@^0.8.5-dev.5:
-  version "0.8.5-dev.5"
-  resolved "https://registry.npmjs.org/last-hit-types/-/last-hit-types-0.8.5-dev.5.tgz#4dda68132d68623fa50fb114de97bbcce8f4935c"
-  integrity sha512-kuv5Lddf3JKBkUtnRcRewXzg1vkIPalDG3mPeEuXbL/j/c6coo2Cvd/8lsVPSSUa6EPhiY5DWAI+caqbNLMyqQ==
+last-hit-types@^0.9.9:
+  version "0.9.9"
+  resolved "https://registry.npmjs.org/last-hit-types/-/last-hit-types-0.9.9.tgz#2a0c464c2a689d202f32d5bd22431ecab4767724"
+  integrity sha512-C4Qmgk/akjXFYipykNfsAQGc/9K2zORQdjEFTF/3DwqWPYmRyexxuD05hruAy+fAal4uP7MjbvxznQEs7tAXPg==
 
 last-run@^1.1.0:
   version "1.1.1"

@@ -5,11 +5,15 @@ export enum EventTypes {
 	ASK_OPEN_ENV = 'ask-open-env',
 	CLOSE_ENV_DIALOG = 'close-env-dialog',
 
+	ASK_OPEN_UPDATE = 'ask-open-update',
+	CLOSE_UPDATE_DIALOG = 'close-update-dialog',
+
 	CLOSE_STORY_CREATE_DIALOG = 'close-story-create-dialog',
 	CLOSE_STORY_RENAME_DIALOG = 'close-story-rename-dialog',
 	CLOSE_FLOW_CREATE_DIALOG = 'close-flow-create-dialog',
 	CLOSE_FLOW_RENAME_DIALOG = 'close-flow-rename-dialog',
 	CLOSE_FLOW_SETTINGS_DIALOG = 'close-flow-settings-dialog',
+	CLOSE_FLOW_RELOAD_DIALOG = 'close-flow-reload-dialog',
 	CLOSE_FLOW_PARAMS_DIALOG = 'close-flow-params-dialog',
 	CLOSE_FLOW_REPLAY_DIALOG = 'close-flow-replay-dialog',
 	CLOSE_FLOW_RECORD_DIALOG = 'close-flow-record-dialog',
@@ -49,6 +53,7 @@ export enum EventTypes {
 	STEP_SELECTED = 'step-selected',
 	STEP_BREAKPOINT_CHANGED = 'step-breakpoint-changed',
 	STEP_DELETED = 'step-deleted',
+	STEP_CONTENT_CHANGED = 'step-content-changed',
 	ASK_SHOW_THUMBNAIL = 'ask-show-thumbnail',
 	ASK_STEP_SEARCH = 'ask-step-search',
 	ASK_REMOVE_STEP_SEARCH_ITEM = 'ask-remove-step-search-item',
